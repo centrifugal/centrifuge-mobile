@@ -3,7 +3,6 @@ package centrifuge
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -385,7 +384,6 @@ func (c *Client) handleError(err error) {
 	if handler != nil {
 		handler.OnError(c, err)
 	} else {
-		log.Println(err)
 		c.Close()
 	}
 }
@@ -404,10 +402,7 @@ func (c *Client) Close() {
 func (c *Client) unsubscribeAll() {
 	if c.conn != nil && c.status == CONNECTED {
 		for ch, sub := range c.subs {
-			err := c.unsubscribe(sub.Channel())
-			if err != nil {
-				log.Println(err)
-			}
+			c.unsubscribe(sub.Channel())
 			delete(c.subs, ch)
 		}
 	}
@@ -524,7 +519,6 @@ func (r *BackoffReconnect) reconnect(c *Client) error {
 
 		err := c.doReconnect()
 		if err != nil {
-			log.Println(err)
 			continue
 		}
 
@@ -693,7 +687,6 @@ func (c *Client) handleAsyncResponse(resp response) error {
 		sub, ok := c.subs[string(channel)]
 		c.subsMutex.RUnlock()
 		if !ok {
-			log.Println("message received but client not subscribed on channel")
 			return nil
 		}
 		sub.handleMessage(messageFromRaw(m))
@@ -701,7 +694,6 @@ func (c *Client) handleAsyncResponse(resp response) error {
 		var b joinLeaveMessage
 		err := json.Unmarshal(body, &b)
 		if err != nil {
-			log.Println("malformed join message")
 			return nil
 		}
 		channel := b.Channel
@@ -709,7 +701,6 @@ func (c *Client) handleAsyncResponse(resp response) error {
 		sub, ok := c.subs[string(channel)]
 		c.subsMutex.RUnlock()
 		if !ok {
-			log.Printf("join received but client not subscribed on channel: %s", string(channel))
 			return nil
 		}
 		sub.handleJoinMessage(clientInfoFromRaw(&b.Data))
@@ -717,7 +708,6 @@ func (c *Client) handleAsyncResponse(resp response) error {
 		var b joinLeaveMessage
 		err := json.Unmarshal(body, &b)
 		if err != nil {
-			log.Println("malformed leave message")
 			return nil
 		}
 		channel := b.Channel
@@ -725,7 +715,6 @@ func (c *Client) handleAsyncResponse(resp response) error {
 		sub, ok := c.subs[string(channel)]
 		c.subsMutex.RUnlock()
 		if !ok {
-			log.Printf("leave received but client not subscribed on channel: %s", string(channel))
 			return nil
 		}
 		sub.handleLeaveMessage(clientInfoFromRaw(&b.Data))
@@ -787,10 +776,7 @@ func (c *Client) connect() error {
 			case <-c.closed:
 				return
 			case <-tick:
-				err := c.sendRefresh()
-				if err != nil {
-					log.Println(err)
-				}
+				c.sendRefresh()
 			}
 		}(body.TTL)
 	}
@@ -872,10 +858,7 @@ func (c *Client) sendRefresh() error {
 			case <-c.closed:
 				return
 			case <-tick:
-				err := c.sendRefresh()
-				if err != nil {
-					log.Println(err)
-				}
+				c.sendRefresh()
 			}
 		}(body.TTL)
 	}
@@ -1034,9 +1017,10 @@ func (c *Client) publish(channel string, data []byte) error {
 }
 
 func (c *Client) sendPublish(channel string, data []byte) (publishResponseBody, error) {
+	raw := json.RawMessage(data)
 	params := publishParams{
 		Channel: channel,
-		Data:    json.RawMessage(data),
+		Data:    &raw,
 	}
 	cmd := publishClientCommand{
 		clientCommand: clientCommand{
