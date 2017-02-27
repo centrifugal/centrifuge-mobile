@@ -9,6 +9,10 @@ import centrifuge.Client;
 import centrifuge.Credentials;
 import centrifuge.EventHandler;
 import centrifuge.DisconnectHandler;
+import centrifuge.Message;
+import centrifuge.MessageHandler;
+import centrifuge.Sub;
+import centrifuge.SubEventHandler;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -42,5 +46,15 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         tv.setText("Connected");
+
+        SubEventHandler subEvents = Centrifuge.newSubEventHandler();
+        MessageHandler messageHandler = new AppMessageHandler(this);
+        subEvents.onMessage(messageHandler);
+
+        try {
+            Sub sub = client.subscribe("public:chat", subEvents);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
