@@ -1,6 +1,6 @@
 //
 //  ViewController.swift
-//  Centrifugo iOS
+//  CentrifugoIOS
 //
 //  Created by Alexander Emelin on 25/02/2017.
 //  Copyright © 2017 Alexander Emelin. All rights reserved.
@@ -100,4 +100,3 @@ class ViewController: UIViewController {
     
     
 }
-

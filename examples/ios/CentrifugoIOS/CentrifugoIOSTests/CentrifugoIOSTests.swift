@@ -1,15 +1,15 @@
 //
-//  centrifugo_iosTests.swift
-//  centrifugo_iosTests
+//  CentrifugoIOSTests.swift
+//  CentrifugoIOSTests
 //
 //  Created by Alexander Emelin on 27/02/2017.
 //  Copyright © 2017 Alexander Emelin. All rights reserved.
 //
 
 import XCTest
-@testable import centrifugo_ios
+@testable import CentrifugoIOS
 
-class centrifugo_iosTests: XCTestCase {
+class CentrifugoIOSTests: XCTestCase {
     
     override func setUp() {
         super.setUp()

@@ -4,7 +4,7 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
-		<key>centrifugo_ios.xcscheme</key>
+		<key>CentrifugoIOS.xcscheme</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>0</integer>
@@ -12,17 +12,17 @@
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
-		<key>26B5AFB21E63863A00644AB7</key>
+		<key>26B5AFEE1E64065200644AB7</key>
 		<dict>
 			<key>primary</key>
 			<true/>
 		</dict>
-		<key>26B5AFC61E63863A00644AB7</key>
+		<key>26B5B0021E64065200644AB7</key>
 		<dict>
 			<key>primary</key>
 			<true/>
 		</dict>
-		<key>26B5AFD11E63863A00644AB7</key>
+		<key>26B5B00D1E64065200644AB7</key>
 		<dict>
 			<key>primary</key>
 			<true/>

@@ -1,6 +1,6 @@
 //
 //  AppDelegate.swift
-//  centrifugo_ios
+//  CentrifugoIOS
 //
 //  Created by Alexander Emelin on 27/02/2017.
 //  Copyright © 2017 Alexander Emelin. All rights reserved.

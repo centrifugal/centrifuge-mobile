@@ -14,10 +14,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "26B5AFB21E63863A00644AB7"
-               BuildableName = "centrifugo_ios.app"
-               BlueprintName = "centrifugo_ios"
-               ReferencedContainer = "container:centrifugo_ios.xcodeproj">
+               BlueprintIdentifier = "26B5AFEE1E64065200644AB7"
+               BuildableName = "CentrifugoIOS.app"
+               BlueprintName = "CentrifugoIOS"
+               ReferencedContainer = "container:CentrifugoIOS.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -32,30 +32,30 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "26B5AFC61E63863A00644AB7"
-               BuildableName = "centrifugo_iosTests.xctest"
-               BlueprintName = "centrifugo_iosTests"
-               ReferencedContainer = "container:centrifugo_ios.xcodeproj">
+               BlueprintIdentifier = "26B5B0021E64065200644AB7"
+               BuildableName = "CentrifugoIOSTests.xctest"
+               BlueprintName = "CentrifugoIOSTests"
+               ReferencedContainer = "container:CentrifugoIOS.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "26B5AFD11E63863A00644AB7"
-               BuildableName = "centrifugo_iosUITests.xctest"
-               BlueprintName = "centrifugo_iosUITests"
-               ReferencedContainer = "container:centrifugo_ios.xcodeproj">
+               BlueprintIdentifier = "26B5B00D1E64065200644AB7"
+               BuildableName = "CentrifugoIOSUITests.xctest"
+               BlueprintName = "CentrifugoIOSUITests"
+               ReferencedContainer = "container:CentrifugoIOS.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "26B5AFB21E63863A00644AB7"
-            BuildableName = "centrifugo_ios.app"
-            BlueprintName = "centrifugo_ios"
-            ReferencedContainer = "container:centrifugo_ios.xcodeproj">
+            BlueprintIdentifier = "26B5AFEE1E64065200644AB7"
+            BuildableName = "CentrifugoIOS.app"
+            BlueprintName = "CentrifugoIOS"
+            ReferencedContainer = "container:CentrifugoIOS.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <AdditionalOptions>
@@ -75,10 +75,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "26B5AFB21E63863A00644AB7"
-            BuildableName = "centrifugo_ios.app"
-            BlueprintName = "centrifugo_ios"
-            ReferencedContainer = "container:centrifugo_ios.xcodeproj">
+            BlueprintIdentifier = "26B5AFEE1E64065200644AB7"
+            BuildableName = "CentrifugoIOS.app"
+            BlueprintName = "CentrifugoIOS"
+            ReferencedContainer = "container:CentrifugoIOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <AdditionalOptions>
@@ -94,10 +94,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "26B5AFB21E63863A00644AB7"
-            BuildableName = "centrifugo_ios.app"
-            BlueprintName = "centrifugo_ios"
-            ReferencedContainer = "container:centrifugo_ios.xcodeproj">
+            BlueprintIdentifier = "26B5AFEE1E64065200644AB7"
+            BuildableName = "CentrifugoIOS.app"
+            BlueprintName = "CentrifugoIOS"
+            ReferencedContainer = "container:CentrifugoIOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
