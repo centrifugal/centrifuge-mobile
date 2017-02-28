@@ -24,13 +24,23 @@ type UnsubscribeHandler interface {
 	OnUnsubscribe(*Sub) error
 }
 
+type SubscribeSuccessHandler interface {
+	OnSubscribeSuccess(*Sub)
+}
+
+type SubscribeErrorHandler interface {
+	OnSubscribeError(*Sub, error)
+}
+
 // SubEventHandler contains callback functions that will be called when
 // corresponding event happens with subscription to channel.
 type SubEventHandler struct {
-	onMessage     MessageHandler
-	onJoin        JoinHandler
-	onLeave       LeaveHandler
-	onUnsubscribe UnsubscribeHandler
+	onMessage          MessageHandler
+	onJoin             JoinHandler
+	onLeave            LeaveHandler
+	onUnsubscribe      UnsubscribeHandler
+	onSubscribeSuccess SubscribeSuccessHandler
+	onSubscribeError   SubscribeErrorHandler
 }
 
 func NewSubEventHandler() *SubEventHandler {
@@ -51,6 +61,14 @@ func (h *SubEventHandler) OnLeave(handler LeaveHandler) {
 
 func (h *SubEventHandler) OnUnsubscribe(handler UnsubscribeHandler) {
 	h.onUnsubscribe = handler
+}
+
+func (h *SubEventHandler) OnSubscribeSuccess(handler SubscribeSuccessHandler) {
+	h.onSubscribeSuccess = handler
+}
+
+func (h *SubEventHandler) OnSubscribeError(handler SubscribeErrorHandler) {
+	h.onSubscribeError = handler
 }
 
 type Sub struct {

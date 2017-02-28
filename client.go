@@ -741,18 +741,42 @@ func (c *Client) privateSign(channel string) (*PrivateSign, error) {
 }
 
 // Subscribe allows to subscribe on channel.
-func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error) {
-	if !c.Connected() {
-		return nil, ErrClientDisconnected
-	}
+func (c *Client) Subscribe(channel string, events *SubEventHandler) *Sub {
 	c.subsMutex.Lock()
-	sub := c.newSub(channel, events)
+	var sub *Sub
+	if _, ok := c.subs[channel]; ok {
+		sub = c.subs[channel]
+		sub.events = events
+	} else {
+		sub = c.newSub(channel, events)
+	}
 	c.subs[channel] = sub
 	c.subsMutex.Unlock()
 
+	if c.Connected() {
+		err := c.subscribe(sub)
+		if err != nil {
+			if sub.events.onSubscribeError != nil {
+				handler := sub.events.onSubscribeError
+				handler.OnSubscribeError(sub, err)
+			}
+		} else {
+			if sub.events.onSubscribeSuccess != nil {
+				handler := sub.events.onSubscribeSuccess
+				handler.OnSubscribeSuccess(sub)
+			}
+		}
+	}
+	return sub
+}
+
+func (c *Client) subscribe(sub *Sub) error {
+
+	channel := sub.Channel()
+
 	privateSign, err := c.privateSign(channel)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	sub.lastMessageMu.Lock()
 	body, err := c.sendSubscribe(channel, sub.lastMessageID, privateSign)
@@ -765,13 +789,13 @@ func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error
 		c.subsMutex.Lock()
 		delete(c.subs, channel)
 		c.subsMutex.Unlock()
-		return nil, err
+		return err
 	}
 	if !body.Status {
 		c.subsMutex.Lock()
 		delete(c.subs, channel)
 		c.subsMutex.Unlock()
-		return nil, ErrBadSubscribeStatus
+		return ErrBadSubscribeStatus
 	}
 
 	if len(body.Messages) > 0 {
@@ -784,9 +808,7 @@ func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error
 		sub.lastMessageID = &lastID
 		sub.lastMessageMu.Unlock()
 	}
-
-	// Subscription on channel successfull.
-	return sub, nil
+	return nil
 }
 
 func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSign *PrivateSign) (subscribeResponseBody, error) {
