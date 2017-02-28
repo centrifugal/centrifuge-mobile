@@ -203,3 +203,32 @@ type disconnectAdvice struct {
 	Reason    string `json:"reason"`
 	Reconnect bool   `json:"reconnect"`
 }
+
+var (
+	arrayJsonPrefix  byte = '['
+	objectJsonPrefix byte = '{'
+)
+
+func responsesFromClientMsg(msg []byte) ([]response, error) {
+	var resps []response
+	firstByte := msg[0]
+	switch firstByte {
+	case objectJsonPrefix:
+		// single command request
+		var resp response
+		err := json.Unmarshal(msg, &resp)
+		if err != nil {
+			return nil, err
+		}
+		resps = append(resps, resp)
+	case arrayJsonPrefix:
+		// array of commands received
+		err := json.Unmarshal(msg, &resps)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, ErrInvalidMessage
+	}
+	return resps, nil
+}

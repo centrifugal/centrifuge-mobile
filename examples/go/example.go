@@ -20,12 +20,12 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message
 }
 
 func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) error {
-	log.Println(fmt.Sprintf("User %s joined channel %s with client ID %s", msg.User, sub.Channel(), msg.Client))
+	log.Println(fmt.Sprintf("User %s (client ID %s) joined channel %s", msg.User, msg.Client, sub.Channel()))
 	return nil
 }
 
 func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) error {
-	log.Println(fmt.Sprintf("User %s with clientID left channel %s with client ID %s", msg.User, msg.Client, sub.Channel()))
+	log.Println(fmt.Sprintf("User %s (client ID %s) left channel %s", msg.User, msg.Client, sub.Channel()))
 	return nil
 }
 
@@ -87,13 +87,13 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Printf("%d messages in channel %s history", len(history), sub.Channel())
+	log.Printf("%d messages in channel %s history", history.NumMessages(), sub.Channel())
 
 	presence, err := sub.Presence()
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Printf("%d clients in channel %s", len(presence), sub.Channel())
+	log.Printf("%d clients in channel %s", presence.NumClients(), sub.Channel())
 
 	err = sub.Unsubscribe()
 	if err != nil {

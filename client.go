@@ -12,7 +12,8 @@ import (
 	"github.com/jpillora/backoff"
 )
 
-// Timestamp is helper function to get current timestamp as string.
+// Timestamp is helper function to get current timestamp as
+// string - i.e. in a format Centrifugo expects.
 func Timestamp() string {
 	return strconv.FormatInt(time.Now().Unix(), 10)
 }
@@ -37,12 +38,11 @@ func NewCredentials(user, timestamp, info, token string) *Credentials {
 var (
 	ErrTimeout              = errors.New("timed out")
 	ErrInvalidMessage       = errors.New("invalid message")
-	ErrDuplicateWaiter      = errors.New("waiter with uid already exists")
+	ErrDuplicateWaiter      = errors.New("waiter with specified uid already exists")
 	ErrWaiterClosed         = errors.New("waiter closed")
 	ErrClientStatus         = errors.New("wrong client status to make operation")
 	ErrClientDisconnected   = errors.New("client disconnected")
 	ErrClientExpired        = errors.New("client expired")
-	ErrReconnectForbidden   = errors.New("reconnect is not allowed after disconnect message")
 	ErrReconnectFailed      = errors.New("reconnect failed")
 	ErrBadSubscribeStatus   = errors.New("bad subscribe status")
 	ErrBadUnsubscribeStatus = errors.New("bad unsubscribe status")
@@ -177,166 +177,12 @@ type Client struct {
 	events            *EventHandler
 }
 
-// MessageHandler is a function to handle messages in channels.
-type MessageHandler interface {
-	OnMessage(*Sub, *Message) error
-}
-
-// JoinHandler is a function to handle join messages.
-type JoinHandler interface {
-	OnJoin(*Sub, *ClientInfo) error
-}
-
-// LeaveHandler is a function to handle leave messages.
-type LeaveHandler interface {
-	OnLeave(*Sub, *ClientInfo) error
-}
-
-// UnsubscribeHandler is a function to handle unsubscribe event.
-type UnsubscribeHandler interface {
-	OnUnsubscribe(*Sub) error
-}
-
-// SubEventHandler contains callback functions that will be called when
-// corresponding event happens with subscription to channel.
-type SubEventHandler struct {
-	onMessage     MessageHandler
-	onJoin        JoinHandler
-	onLeave       LeaveHandler
-	onUnsubscribe UnsubscribeHandler
-}
-
-func NewSubEventHandler() *SubEventHandler {
-	return &SubEventHandler{}
-}
-
-func (h *SubEventHandler) OnMessage(handler MessageHandler) {
-	h.onMessage = handler
-}
-
-func (h *SubEventHandler) OnJoin(handler JoinHandler) {
-	h.onJoin = handler
-}
-
-func (h *SubEventHandler) OnLeave(handler LeaveHandler) {
-	h.onLeave = handler
-}
-
-func (h *SubEventHandler) OnUnsubscribe(handler UnsubscribeHandler) {
-	h.onUnsubscribe = handler
-}
-
-type Sub struct {
-	channel       string
-	centrifuge    *Client
-	events        *SubEventHandler
-	lastMessageID *string
-	lastMessageMu sync.RWMutex
-}
-
-func (c *Client) newSub(channel string, events *SubEventHandler) *Sub {
-	return &Sub{
-		centrifuge: c,
-		channel:    channel,
-		events:     events,
-	}
-}
-
-func (s *Sub) Channel() string {
-	return s.channel
-}
-
-// Publish JSON encoded data.
-func (s *Sub) Publish(data []byte) error {
-	return s.centrifuge.publish(s.channel, data)
-}
-
-// History allows to extract channel history.
-func (s *Sub) History() ([]Message, error) {
-	return s.centrifuge.history(s.channel)
-}
-
-// Presence allows to extract presence information for channel.
-func (s *Sub) Presence() (map[string]ClientInfo, error) {
-	return s.centrifuge.presence(s.channel)
-}
-
-// Unsubscribe allows to unsubscribe from channel.
-func (s *Sub) Unsubscribe() error {
-	return s.centrifuge.unsubscribe(s.channel)
-}
-
-func (s *Sub) handleMessage(m *Message) {
-	var handler MessageHandler
-	if s.events != nil && s.events.onMessage != nil {
-		handler = s.events.onMessage
-	}
-	mid := m.UID
-	s.lastMessageMu.Lock()
-	s.lastMessageID = &mid
-	s.lastMessageMu.Unlock()
-	if handler != nil {
-		handler.OnMessage(s, m)
-	}
-}
-
-func (s *Sub) handleJoinMessage(info *ClientInfo) {
-	var handler JoinHandler
-	if s.events != nil && s.events.onJoin != nil {
-		handler = s.events.onJoin
-	}
-	if handler != nil {
-		handler.OnJoin(s, info)
-	}
-}
-
-func (s *Sub) handleLeaveMessage(info *ClientInfo) {
-	var handler LeaveHandler
-	if s.events != nil && s.events.onLeave != nil {
-		handler = s.events.onLeave
-	}
-	if handler != nil {
-		handler.OnLeave(s, info)
-	}
-}
-
-func (s *Sub) resubscribe() error {
-	privateSign, err := s.centrifuge.privateSign(s.channel)
-	if err != nil {
-		return err
-	}
-	s.lastMessageMu.Lock()
-	msgID := *s.lastMessageID
-	s.lastMessageMu.Unlock()
-	body, err := s.centrifuge.sendSubscribe(s.channel, &msgID, privateSign)
-	if err != nil {
-		return err
-	}
-	if !body.Status {
-		return ErrBadSubscribeStatus
-	}
-
-	if len(body.Messages) > 0 {
-		for i := len(body.Messages) - 1; i >= 0; i-- {
-			s.handleMessage(messageFromRaw(&body.Messages[i]))
-		}
-	} else {
-		lastID := string(body.Last)
-		s.lastMessageMu.Lock()
-		s.lastMessageID = &lastID
-		s.lastMessageMu.Unlock()
-	}
-
-	// resubscribe successful.
-	return nil
-}
-
 func (c *Client) nextMsgID() int32 {
 	return atomic.AddInt32(&c.msgID, 1)
 }
 
-// NewClient initializes Client struct. It accepts URL to Centrifugo server,
-// connection Credentials, event handler and Config.
+// New initializes Client struct. It accepts URL to Centrifugo server,
+// connection Credentials, EventHandler and Config.
 func New(u string, creds *Credentials, events *EventHandler, config *Config) *Client {
 	c := &Client{
 		url:               u,
@@ -381,7 +227,7 @@ func (c *Client) subscribed(channel string) bool {
 func (c *Client) ClientID() string {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	return string(c.clientID)
+	return c.clientID
 }
 
 func (c *Client) handleError(err error) {
@@ -624,35 +470,6 @@ func (c *Client) run() {
 	}
 }
 
-var (
-	arrayJsonPrefix  byte = '['
-	objectJsonPrefix byte = '{'
-)
-
-func responsesFromClientMsg(msg []byte) ([]response, error) {
-	var resps []response
-	firstByte := msg[0]
-	switch firstByte {
-	case objectJsonPrefix:
-		// single command request
-		var resp response
-		err := json.Unmarshal(msg, &resp)
-		if err != nil {
-			return nil, err
-		}
-		resps = append(resps, resp)
-	case arrayJsonPrefix:
-		// array of commands received
-		err := json.Unmarshal(msg, &resps)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, ErrInvalidMessage
-	}
-	return resps, nil
-}
-
 func (c *Client) handle(msg []byte) error {
 	if len(msg) == 0 {
 		return nil
@@ -680,12 +497,7 @@ func (c *Client) handle(msg []byte) error {
 
 func (c *Client) handleAsyncResponse(resp response) error {
 	method := resp.Method
-	errorStr := resp.Error
 	body := resp.Body
-	if errorStr != "" {
-		// Should never occur in usual workflow.
-		return errors.New(errorStr)
-	}
 	switch method {
 	case "message":
 		var m *rawMessage
@@ -737,27 +549,17 @@ func (c *Client) handleAsyncResponse(resp response) error {
 }
 
 // Lock must be held outside
-func (c *Client) connectWS() error {
-	conn, err := c.createConn(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond)
-	if err != nil {
-		return err
-	}
-	c.conn = conn
-	return nil
-}
-
-// Lock must be held outside
 func (c *Client) connect() error {
 
 	c.status = CONNECTING
 
-	err := c.connectWS()
+	conn, err := c.createConn(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond)
 	if err != nil {
 		return err
 	}
 
+	c.conn = conn
 	go c.run()
-
 	go c.read()
 
 	var body connectResponseBody
@@ -943,15 +745,15 @@ func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error
 	if !c.Connected() {
 		return nil, ErrClientDisconnected
 	}
-	privateSign, err := c.privateSign(channel)
-	if err != nil {
-		return nil, err
-	}
 	c.subsMutex.Lock()
 	sub := c.newSub(channel, events)
 	c.subs[channel] = sub
 	c.subsMutex.Unlock()
 
+	privateSign, err := c.privateSign(channel)
+	if err != nil {
+		return nil, err
+	}
 	sub.lastMessageMu.Lock()
 	body, err := c.sendSubscribe(channel, sub.lastMessageID, privateSign)
 	sub.lastMessageMu.Unlock()
