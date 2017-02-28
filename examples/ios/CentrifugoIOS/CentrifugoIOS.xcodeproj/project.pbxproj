@@ -14,7 +14,7 @@
 		26B5AFFD1E64065200644AB7 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 26B5AFFB1E64065200644AB7 /* LaunchScreen.storyboard */; };
 		26B5B0081E64065200644AB7 /* CentrifugoIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5B0071E64065200644AB7 /* CentrifugoIOSTests.swift */; };
 		26B5B0131E64065200644AB7 /* CentrifugoIOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5B0121E64065200644AB7 /* CentrifugoIOSUITests.swift */; };
-		26B5B0211E64067600644AB7 /* Centrifuge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26B5B0201E64067600644AB7 /* Centrifuge.framework */; };
+		26EBD9691E655E8800EB4FD7 /* Centrifuge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26EBD9681E655E8800EB4FD7 /* Centrifuge.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,7 +48,7 @@
 		26B5B00E1E64065200644AB7 /* CentrifugoIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CentrifugoIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		26B5B0121E64065200644AB7 /* CentrifugoIOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CentrifugoIOSUITests.swift; sourceTree = "<group>"; };
 		26B5B0141E64065200644AB7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		26B5B0201E64067600644AB7 /* Centrifuge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Centrifuge.framework; sourceTree = "<group>"; };
+		26EBD9681E655E8800EB4FD7 /* Centrifuge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Centrifuge.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,7 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				26B5B0211E64067600644AB7 /* Centrifuge.framework in Frameworks */,
+				26EBD9691E655E8800EB4FD7 /* Centrifuge.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,7 +84,7 @@
 				26B5B0061E64065200644AB7 /* CentrifugoIOSTests */,
 				26B5B0111E64065200644AB7 /* CentrifugoIOSUITests */,
 				26B5AFF01E64065200644AB7 /* Products */,
-				26B5B0201E64067600644AB7 /* Centrifuge.framework */,
+				26EBD9681E655E8800EB4FD7 /* Centrifuge.framework */,
 			);
 			sourceTree = "<group>";
 		};
@@ -517,6 +517,7 @@
 				26B5B0191E64065200644AB7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		26B5B01A1E64065200644AB7 /* Build configuration list for PBXNativeTarget "CentrifugoIOSTests" */ = {
 			isa = XCConfigurationList;
@@ -525,6 +526,7 @@
 				26B5B01C1E64065200644AB7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		26B5B01D1E64065200644AB7 /* Build configuration list for PBXNativeTarget "CentrifugoIOSUITests" */ = {
 			isa = XCConfigurationList;
@@ -533,6 +535,7 @@
 				26B5B01F1E64065200644AB7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

@@ -10,7 +10,6 @@
 #include "Universe.objc.h"
 
 
-@class CentrifugeBackoffReconnect;
 @class CentrifugeClient;
 @class CentrifugeClientInfo;
 @class CentrifugeConfig;
@@ -21,6 +20,8 @@
 @class CentrifugePrivateSign;
 @class CentrifugeSub;
 @class CentrifugeSubEventHandler;
+@protocol CentrifugeConnectHandler;
+@class CentrifugeConnectHandler;
 @protocol CentrifugeDisconnectHandler;
 @class CentrifugeDisconnectHandler;
 @protocol CentrifugeErrorHandler;
@@ -38,23 +39,6 @@
 @protocol CentrifugeUnsubscribeHandler;
 @class CentrifugeUnsubscribeHandler;
 
-@interface CentrifugeBackoffReconnect : NSObject <goSeqRefInterface> {
-}
-@property(strong, readonly) id _ref;
-
-- (id)initWithRef:(id)ref;
-- (long)numReconnect;
-- (void)setNumReconnect:(long)v;
-- (double)factor;
-- (void)setFactor:(double)v;
-- (BOOL)jitter;
-- (void)setJitter:(BOOL)v;
-- (long)minMilliseconds;
-- (void)setMinMilliseconds:(long)v;
-- (long)maxMilliseconds;
-- (void)setMaxMilliseconds:(long)v;
-@end
-
 @interface CentrifugeClient : NSObject <goSeqRefInterface> {
 }
 @property(strong, readonly) id _ref;
@@ -64,7 +48,6 @@
 - (void)close;
 - (BOOL)connect:(NSError**)error;
 - (BOOL)connected;
-- (BOOL)reconnect:(CentrifugeBackoffReconnect*)strategy error:(NSError**)error;
 - (CentrifugeSub*)subscribe:(NSString*)channel events:(CentrifugeSubEventHandler*)events error:(NSError**)error;
 - (BOOL)subscribed:(NSString*)channel;
 @end
@@ -93,10 +76,6 @@
 - (void)setTimeoutMilliseconds:(long)v;
 - (NSString*)privateChannelPrefix;
 - (void)setPrivateChannelPrefix:(NSString*)v;
-- (BOOL)debug;
-- (void)setDebug:(BOOL)v;
-- (BOOL)reconnect;
-- (void)setReconnect:(BOOL)v;
 @end
 
 @interface CentrifugeCredentials : NSObject <goSeqRefInterface> {
@@ -119,6 +98,7 @@
 @property(strong, readonly) id _ref;
 
 - (id)initWithRef:(id)ref;
+- (void)onConnect:(id<CentrifugeConnectHandler>)handler;
 - (void)onDisconnect:(id<CentrifugeDisconnectHandler>)handler;
 - (void)onError:(id<CentrifugeErrorHandler>)handler;
 - (void)onPrivateSub:(id<CentrifugePrivateSubHandler>)handler;
@@ -189,8 +169,12 @@
 - (void)onUnsubscribe:(id<CentrifugeUnsubscribeHandler>)handler;
 @end
 
+@protocol CentrifugeConnectHandler <NSObject>
+- (void)onConnect:(CentrifugeClient*)p0;
+@end
+
 @protocol CentrifugeDisconnectHandler <NSObject>
-- (BOOL)onDisconnect:(CentrifugeClient*)p0 error:(NSError**)error;
+- (void)onDisconnect:(CentrifugeClient*)p0;
 @end
 
 @protocol CentrifugeErrorHandler <NSObject>
@@ -223,16 +207,12 @@
 
 FOUNDATION_EXPORT const int64_t CentrifugeCLOSED;
 FOUNDATION_EXPORT const int64_t CentrifugeCONNECTED;
+FOUNDATION_EXPORT const int64_t CentrifugeCONNECTING;
 FOUNDATION_EXPORT const int64_t CentrifugeDISCONNECTED;
 FOUNDATION_EXPORT NSString* const CentrifugeDefaultPrivateChannelPrefix;
-FOUNDATION_EXPORT const BOOL CentrifugeDefaultReconnect;
 FOUNDATION_EXPORT const double CentrifugeDefaultTimeoutMilliseconds;
-FOUNDATION_EXPORT const int64_t CentrifugeRECONNECTING;
 
 @interface Centrifuge : NSObject
-+ (CentrifugeBackoffReconnect*) defaultBackoffReconnect;
-+ (void) setDefaultBackoffReconnect:(CentrifugeBackoffReconnect*)v;
-
 + (NSError*) errBadPublishStatus;
 + (void) setErrBadPublishStatus:(NSError*)v;
 
@@ -283,6 +263,8 @@ FOUNDATION_EXPORT CentrifugeSubEventHandler* CentrifugeNewSubEventHandler();
 
 FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 
+@class CentrifugeConnectHandler;
+
 @class CentrifugeDisconnectHandler;
 
 @class CentrifugeErrorHandler;
@@ -299,12 +281,20 @@ FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 
 @class CentrifugeUnsubscribeHandler;
 
+@interface CentrifugeConnectHandler : NSObject <goSeqRefInterface, CentrifugeConnectHandler> {
+}
+@property(strong, readonly) id _ref;
+
+- (instancetype)initWithRef:(id)ref;
+- (void)onConnect:(CentrifugeClient*)p0;
+@end
+
 @interface CentrifugeDisconnectHandler : NSObject <goSeqRefInterface, CentrifugeDisconnectHandler> {
 }
 @property(strong, readonly) id _ref;
 
 - (instancetype)initWithRef:(id)ref;
-- (BOOL)onDisconnect:(CentrifugeClient*)p0 error:(NSError**)error;
+- (void)onDisconnect:(CentrifugeClient*)p0;
 @end
 
 @interface CentrifugeErrorHandler : NSObject <goSeqRefInterface, CentrifugeErrorHandler> {

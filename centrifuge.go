@@ -52,22 +52,18 @@ var (
 const (
 	DefaultPrivateChannelPrefix = "$"
 	DefaultTimeoutMilliseconds  = 1 * 10e3
-	DefaultReconnect            = true
 )
 
 // Config contains various client options.
 type Config struct {
 	TimeoutMilliseconds  int
 	PrivateChannelPrefix string
-	Debug                bool
-	Reconnect            bool
 }
 
 // DefaultConfig with standard private channel prefix and 1 second timeout.
 var defaultConfig = &Config{
 	PrivateChannelPrefix: DefaultPrivateChannelPrefix,
 	TimeoutMilliseconds:  DefaultTimeoutMilliseconds,
-	Reconnect:            DefaultReconnect,
 }
 
 func DefaultConfig() *Config {
@@ -94,6 +90,14 @@ func newPrivateRequest(client string, channel string) *PrivateRequest {
 	}
 }
 
+type ConnectHandler interface {
+	OnConnect(*Client)
+}
+
+type DisconnectHandler interface {
+	OnDisconnect(*Client)
+}
+
 type PrivateSubHandler interface {
 	OnPrivateSub(*Client, *PrivateRequest) (*PrivateSign, error)
 }
@@ -102,23 +106,25 @@ type RefreshHandler interface {
 	OnRefresh(*Client) (*Credentials, error)
 }
 
-type DisconnectHandler interface {
-	OnDisconnect(*Client) error
-}
-
 type ErrorHandler interface {
 	OnError(*Client, error)
 }
 
 type EventHandler struct {
-	onPrivateSub PrivateSubHandler
-	onError      ErrorHandler
+	onConnect    ConnectHandler
 	onDisconnect DisconnectHandler
+	onPrivateSub PrivateSubHandler
 	onRefresh    RefreshHandler
+	onError      ErrorHandler
 }
 
 func NewEventHandler() *EventHandler {
 	return &EventHandler{}
+}
+
+// OnConnect is a function to handle connect event.
+func (h *EventHandler) OnConnect(handler ConnectHandler) {
+	h.onConnect = handler
 }
 
 // OnDisconnect is a function to handle disconnect event.
@@ -131,43 +137,44 @@ func (h *EventHandler) OnPrivateSub(handler PrivateSubHandler) {
 	h.onPrivateSub = handler
 }
 
-// OnError is a function to handle critical protocol errors manually.
-func (h *EventHandler) OnError(handler ErrorHandler) {
-	h.onError = handler
-}
-
 // OnRefresh handles refresh event when client's credentials expired and must be refreshed.
 func (h *EventHandler) OnRefresh(handler RefreshHandler) {
 	h.onRefresh = handler
 }
 
+// OnError is a function to handle critical protocol errors manually.
+func (h *EventHandler) OnError(handler ErrorHandler) {
+	h.onError = handler
+}
+
 const (
 	DISCONNECTED = iota
+	CONNECTING
 	CONNECTED
 	CLOSED
-	RECONNECTING
 )
 
 // Client describes client connection to Centrifugo server.
 type Client struct {
-	mutex        sync.RWMutex
-	url          string
-	config       *Config
-	credentials  *Credentials
-	conn         connection
-	msgID        int32
-	status       int
-	clientID     string
-	subsMutex    sync.RWMutex
-	subs         map[string]*Sub
-	waitersMutex sync.RWMutex
-	waiters      map[string]chan response
-	receive      chan []byte
-	write        chan []byte
-	closed       chan struct{}
-	reconnect    bool
-	createConn   connFactory
-	events       *EventHandler
+	mutex             sync.RWMutex
+	url               string
+	config            *Config
+	credentials       *Credentials
+	conn              connection
+	msgID             int32
+	status            int
+	clientID          string
+	subsMutex         sync.RWMutex
+	subs              map[string]*Sub
+	waitersMutex      sync.RWMutex
+	waiters           map[string]chan response
+	receive           chan []byte
+	write             chan []byte
+	closed            chan struct{}
+	reconnect         bool
+	reconnectStrategy reconnectStrategy
+	createConn        connFactory
+	events            *EventHandler
 }
 
 // MessageHandler is a function to handle messages in channels.
@@ -332,17 +339,18 @@ func (c *Client) nextMsgID() int32 {
 // connection Credentials, event handler and Config.
 func New(u string, creds *Credentials, events *EventHandler, config *Config) *Client {
 	c := &Client{
-		url:         u,
-		subs:        make(map[string]*Sub),
-		config:      config,
-		credentials: creds,
-		receive:     make(chan []byte, 64),
-		write:       make(chan []byte, 64),
-		closed:      make(chan struct{}),
-		waiters:     make(map[string]chan response),
-		reconnect:   true,
-		createConn:  newWSConnection,
-		events:      events,
+		url:               u,
+		subs:              make(map[string]*Sub),
+		config:            config,
+		credentials:       creds,
+		receive:           make(chan []byte, 64),
+		write:             make(chan []byte, 64),
+		closed:            make(chan struct{}),
+		waiters:           make(map[string]chan response),
+		reconnect:         true,
+		reconnectStrategy: defaultBackoffReconnect,
+		createConn:        newWSConnection,
+		events:            events,
 	}
 	return c
 }
@@ -443,7 +451,7 @@ func (c *Client) handleDisconnect(err error) {
 		}
 	}
 
-	if c.status == CLOSED || c.status == RECONNECTING {
+	if c.status == CLOSED || c.status == CONNECTING {
 		c.mutex.Unlock()
 		return
 	}
@@ -472,15 +480,36 @@ func (c *Client) handleDisconnect(err error) {
 		handler = c.events.onDisconnect
 	}
 
+	reconnect := c.reconnect
 	c.mutex.Unlock()
 
 	if handler != nil {
-		handler.OnDisconnect(c)
+		go func() {
+			handler.OnDisconnect(c)
+		}()
 	}
 
+	if !reconnect {
+		return
+	}
+	err = c.reconnectStrategy.reconnect(c)
+	if err != nil {
+		c.Close()
+	} else {
+		if c.events != nil && c.events.onConnect != nil {
+			handler := c.events.onConnect
+			go func() {
+				handler.OnConnect(c)
+			}()
+		}
+	}
 }
 
-type BackoffReconnect struct {
+type reconnectStrategy interface {
+	reconnect(c *Client) error
+}
+
+type backoffReconnect struct {
 	// NumReconnect is maximum number of reconnect attempts, 0 means reconnect forever.
 	NumReconnect int
 	//Factor is the multiplying factor for each increment step.
@@ -493,7 +522,7 @@ type BackoffReconnect struct {
 	MaxMilliseconds int
 }
 
-var DefaultBackoffReconnect = &BackoffReconnect{
+var defaultBackoffReconnect = &backoffReconnect{
 	NumReconnect:    0,
 	MinMilliseconds: 100,
 	MaxMilliseconds: 10 * 1000,
@@ -501,7 +530,7 @@ var DefaultBackoffReconnect = &BackoffReconnect{
 	Jitter:          true,
 }
 
-func (r *BackoffReconnect) reconnect(c *Client) error {
+func (r *backoffReconnect) reconnect(c *Client) error {
 	b := &backoff.Backoff{
 		Min:    time.Duration(r.MinMilliseconds) * time.Millisecond,
 		Max:    time.Duration(r.MaxMilliseconds) * time.Millisecond,
@@ -516,7 +545,6 @@ func (r *BackoffReconnect) reconnect(c *Client) error {
 		time.Sleep(b.Duration())
 
 		reconnects += 1
-
 		err := c.doReconnect()
 		if err != nil {
 			continue
@@ -549,22 +577,6 @@ func (c *Client) doReconnect() error {
 	}
 
 	return nil
-}
-
-func (c *Client) Reconnect(strategy *BackoffReconnect) error {
-	c.mutex.Lock()
-	reconnect := c.reconnect
-	c.mutex.Unlock()
-	if !reconnect {
-		return ErrReconnectForbidden
-	}
-	if strategy == nil {
-		strategy = DefaultBackoffReconnect
-	}
-	c.mutex.Lock()
-	c.status = RECONNECTING
-	c.mutex.Unlock()
-	return strategy.reconnect(c)
 }
 
 func (c *Client) resubscribe() error {
@@ -736,6 +748,9 @@ func (c *Client) connectWS() error {
 
 // Lock must be held outside
 func (c *Client) connect() error {
+
+	c.status = CONNECTING
+
 	err := c.connectWS()
 	if err != nil {
 		return err
@@ -789,11 +804,19 @@ func (c *Client) connect() error {
 // Connect connects to Centrifugo and sends connect message to authorize.
 func (c *Client) Connect() error {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
 	if c.status == CONNECTED {
+		c.mutex.Unlock()
 		return ErrClientStatus
 	}
-	return c.connect()
+	err := c.connect()
+	c.mutex.Unlock()
+	if err == nil && c.events != nil && c.events.onConnect != nil {
+		handler := c.events.onConnect
+		go func() {
+			handler.OnConnect(c)
+		}()
+	}
+	return err
 }
 
 func (c *Client) refreshCredentials() error {

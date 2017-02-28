@@ -42,16 +42,14 @@ type eventHandler struct {
 	done chan struct{}
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client) error {
+func (h *eventHandler) OnConnect(c *centrifuge.Client) {
+	log.Println("Connected")
+	return
+}
+
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client) {
 	log.Println("Disconnected")
-	err := c.Reconnect(centrifuge.DefaultBackoffReconnect)
-	if err != nil {
-		log.Println(err)
-		close(h.done)
-	} else {
-		log.Println("Reconnected")
-	}
-	return nil
+	return
 }
 
 type subEventHandler struct{}
@@ -69,20 +67,19 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 		done: done,
 	}
 
-	events := &centrifuge.EventHandler{
-		OnDisconnect: handler,
-	}
+	events := centrifuge.NewEventHandler()
+	events.OnConnect(handler)
+	events.OnDisconnect(handler)
 
-	c := centrifuge.New(wsURL, creds, events, centrifuge.DefaultConfig)
+	c := centrifuge.New(wsURL, creds, events, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	subEvents := &centrifuge.SubEventHandler{
-		OnMessage: &subEventHandler{},
-	}
+	subEvents := centrifuge.NewSubEventHandler()
+	subEvents.OnMessage(&subEventHandler{})
 
 	sub, err := c.Subscribe("public:chat", subEvents)
 	if err != nil {

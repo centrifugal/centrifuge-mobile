@@ -9,6 +9,20 @@
 import UIKit
 import Centrifuge
 
+class ConnectHandler : NSObject, CentrifugeConnectHandlerProtocol {
+    var l: UILabel!
+    
+    func setLabel(l: UILabel!) {
+        self.l = l
+    }
+    
+    func onConnect(_ p0: CentrifugeClient!) {
+        DispatchQueue.main.async{
+            self.l.text = "Connected";
+        }
+    }
+}
+
 class DisconnectHandler : NSObject, CentrifugeDisconnectHandlerProtocol {
     var l: UILabel!
     
@@ -16,7 +30,7 @@ class DisconnectHandler : NSObject, CentrifugeDisconnectHandlerProtocol {
         self.l = l
     }
     
-    func onDisconnect(_ p0: CentrifugeClient!) throws {
+    func onDisconnect(_ p0: CentrifugeClient!) {
         DispatchQueue.main.async{
             self.l.text = "Disconnected";
         }
@@ -52,9 +66,14 @@ class ViewController: UIViewController {
             )
             
             let eventHandler = CentrifugeNewEventHandler()
+            let connectHandler = ConnectHandler()
+            connectHandler.setLabel(l: self.label)
             let disconnectHandler = DisconnectHandler()
             disconnectHandler.setLabel(l: self.label)
+            
+            eventHandler?.onConnect(connectHandler)
             eventHandler?.onDisconnect(disconnectHandler)
+            
             
             let url = "ws://localhost:8000/connection/websocket"
             let client = CentrifugeNew(url, creds, eventHandler, CentrifugeDefaultConfig())
