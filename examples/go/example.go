@@ -12,11 +12,18 @@ import (
 	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
+type TestMessage struct {
+	Input string `json:"input"`
+}
+
 type subEventHandler struct{}
 
 func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) error {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
-	return nil
+	var m TestMessage
+	err := json.Unmarshal(msg.Data, &m)
+	println(m.Input)
+	return err
 }
 
 func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) error {
@@ -71,9 +78,7 @@ func main() {
 
 	sub := c.Subscribe("public:chat", events)
 
-	data := map[string]string{
-		"input": "test",
-	}
+	data := TestMessage{Input: "example input"}
 	dataBytes, _ := json.Marshal(data)
 	err = sub.Publish(dataBytes)
 	if err != nil {

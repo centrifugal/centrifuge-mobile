@@ -3,7 +3,9 @@ package main
 // Private subscription example.
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/centrifugal/centrifuge-mobile"
 	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
@@ -45,6 +47,18 @@ func (h *eventHandler) OnPrivateSub(c *centrifuge.Client, req *centrifuge.Privat
 	return privateSign, nil
 }
 
+type subEventHandler struct{}
+
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub) {
+	log.Println(fmt.Sprintf("Successfully subscribed on private channel %s", sub.Channel()))
+	os.Exit(0)
+}
+
+func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, err error) {
+	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), err))
+	os.Exit(1)
+}
+
 func newConnection() *centrifuge.Client {
 	creds := credentials()
 	wsURL := "ws://localhost:8000/connection/websocket"
@@ -67,10 +81,13 @@ func main() {
 	c := newConnection()
 	defer c.Close()
 
+	events := centrifuge.NewSubEventHandler()
+	subEventHandler := &subEventHandler{}
+	events.OnSubscribeSuccess(subEventHandler)
+	events.OnSubscribeError(subEventHandler)
+
 	// Subscribe on private channel.
-	_, err := c.Subscribe("$public:chat", nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	log.Println("Successfully subscribed on private channel, done")
+	c.Subscribe("$public:chat", events)
+
+	select {}
 }

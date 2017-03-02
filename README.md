@@ -9,6 +9,6 @@ See [examples](https://github.com/centrifugal/centrifuge-mobile/tree/master/exam
 Build for mobile:
 
 ```
-gomobile bind -target=ios github.com/centrifugal/centrifuge-mobile
-gomobile bind -target=android github.com/centrifugal/centrifuge-mobile
+gomobile bind -target=ios -tags="mobile" github.com/centrifugal/centrifuge-mobile
+gomobile bind -target=android -tags="mobile" github.com/centrifugal/centrifuge-mobile
 ```
