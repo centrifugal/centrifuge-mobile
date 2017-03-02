@@ -15,7 +15,9 @@
 @class CentrifugeConfig;
 @class CentrifugeCredentials;
 @class CentrifugeEventHandler;
+@class CentrifugeHistoryData;
 @class CentrifugeMessage;
+@class CentrifugePresenceData;
 @class CentrifugePrivateRequest;
 @class CentrifugePrivateSign;
 @class CentrifugeSub;
@@ -36,6 +38,10 @@
 @class CentrifugePrivateSubHandler;
 @protocol CentrifugeRefreshHandler;
 @class CentrifugeRefreshHandler;
+@protocol CentrifugeSubscribeErrorHandler;
+@class CentrifugeSubscribeErrorHandler;
+@protocol CentrifugeSubscribeSuccessHandler;
+@class CentrifugeSubscribeSuccessHandler;
 @protocol CentrifugeUnsubscribeHandler;
 @class CentrifugeUnsubscribeHandler;
 
@@ -48,7 +54,7 @@
 - (void)close;
 - (BOOL)connect:(NSError**)error;
 - (BOOL)connected;
-- (CentrifugeSub*)subscribe:(NSString*)channel events:(CentrifugeSubEventHandler*)events error:(NSError**)error;
+- (CentrifugeSub*)subscribe:(NSString*)channel events:(CentrifugeSubEventHandler*)events;
 - (BOOL)subscribed:(NSString*)channel;
 @end
 
@@ -105,6 +111,15 @@
 - (void)onRefresh:(id<CentrifugeRefreshHandler>)handler;
 @end
 
+@interface CentrifugeHistoryData : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) id _ref;
+
+- (id)initWithRef:(id)ref;
+- (CentrifugeMessage*)messageAt:(long)i;
+- (long)numMessages;
+@end
+
 @interface CentrifugeMessage : NSObject <goSeqRefInterface> {
 }
 @property(strong, readonly) id _ref;
@@ -120,6 +135,15 @@
 - (void)setData:(NSString*)v;
 - (NSString*)client;
 - (void)setClient:(NSString*)v;
+@end
+
+@interface CentrifugePresenceData : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) id _ref;
+
+- (id)initWithRef:(id)ref;
+- (CentrifugeClientInfo*)clientAt:(long)i;
+- (long)numClients;
 @end
 
 @interface CentrifugePrivateRequest : NSObject <goSeqRefInterface> {
@@ -150,10 +174,8 @@
 
 - (id)initWithRef:(id)ref;
 - (NSString*)channel;
-// skipped method Sub.History with unsupported parameter or return types
-
-// skipped method Sub.Presence with unsupported parameter or return types
-
+- (CentrifugeHistoryData*)history:(NSError**)error;
+- (CentrifugePresenceData*)presence:(NSError**)error;
 - (BOOL)publish:(NSData*)data error:(NSError**)error;
 - (BOOL)unsubscribe:(NSError**)error;
 @end
@@ -166,6 +188,8 @@
 - (void)onJoin:(id<CentrifugeJoinHandler>)handler;
 - (void)onLeave:(id<CentrifugeLeaveHandler>)handler;
 - (void)onMessage:(id<CentrifugeMessageHandler>)handler;
+- (void)onSubscribeError:(id<CentrifugeSubscribeErrorHandler>)handler;
+- (void)onSubscribeSuccess:(id<CentrifugeSubscribeSuccessHandler>)handler;
 - (void)onUnsubscribe:(id<CentrifugeUnsubscribeHandler>)handler;
 @end
 
@@ -199,6 +223,14 @@
 
 @protocol CentrifugeRefreshHandler <NSObject>
 - (CentrifugeCredentials*)onRefresh:(CentrifugeClient*)p0 error:(NSError**)error;
+@end
+
+@protocol CentrifugeSubscribeErrorHandler <NSObject>
+- (void)onSubscribeError:(CentrifugeSub*)p0 p1:(NSError*)p1;
+@end
+
+@protocol CentrifugeSubscribeSuccessHandler <NSObject>
+- (void)onSubscribeSuccess:(CentrifugeSub*)p0;
 @end
 
 @protocol CentrifugeUnsubscribeHandler <NSObject>
@@ -240,9 +272,6 @@ FOUNDATION_EXPORT const double CentrifugeDefaultTimeoutMilliseconds;
 + (NSError*) errReconnectFailed;
 + (void) setErrReconnectFailed:(NSError*)v;
 
-+ (NSError*) errReconnectForbidden;
-+ (void) setErrReconnectForbidden:(NSError*)v;
-
 + (NSError*) errTimeout;
 + (void) setErrTimeout:(NSError*)v;
 
@@ -278,6 +307,10 @@ FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 @class CentrifugePrivateSubHandler;
 
 @class CentrifugeRefreshHandler;
+
+@class CentrifugeSubscribeErrorHandler;
+
+@class CentrifugeSubscribeSuccessHandler;
 
 @class CentrifugeUnsubscribeHandler;
 
@@ -343,6 +376,22 @@ FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 
 - (instancetype)initWithRef:(id)ref;
 - (CentrifugeCredentials*)onRefresh:(CentrifugeClient*)p0 error:(NSError**)error;
+@end
+
+@interface CentrifugeSubscribeErrorHandler : NSObject <goSeqRefInterface, CentrifugeSubscribeErrorHandler> {
+}
+@property(strong, readonly) id _ref;
+
+- (instancetype)initWithRef:(id)ref;
+- (void)onSubscribeError:(CentrifugeSub*)p0 p1:(NSError*)p1;
+@end
+
+@interface CentrifugeSubscribeSuccessHandler : NSObject <goSeqRefInterface, CentrifugeSubscribeSuccessHandler> {
+}
+@property(strong, readonly) id _ref;
+
+- (instancetype)initWithRef:(id)ref;
+- (void)onSubscribeSuccess:(CentrifugeSub*)p0;
 @end
 
 @interface CentrifugeUnsubscribeHandler : NSObject <goSeqRefInterface, CentrifugeUnsubscribeHandler> {

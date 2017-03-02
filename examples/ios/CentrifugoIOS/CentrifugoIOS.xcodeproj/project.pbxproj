@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		267A62931E65F03400B4D18B /* Centrifuge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 267A62921E65F03400B4D18B /* Centrifuge.framework */; };
 		26B5AFF31E64065200644AB7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5AFF21E64065200644AB7 /* AppDelegate.swift */; };
 		26B5AFF51E64065200644AB7 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5AFF41E64065200644AB7 /* ViewController.swift */; };
 		26B5AFF81E64065200644AB7 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 26B5AFF61E64065200644AB7 /* Main.storyboard */; };
@@ -14,7 +15,6 @@
 		26B5AFFD1E64065200644AB7 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 26B5AFFB1E64065200644AB7 /* LaunchScreen.storyboard */; };
 		26B5B0081E64065200644AB7 /* CentrifugoIOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5B0071E64065200644AB7 /* CentrifugoIOSTests.swift */; };
 		26B5B0131E64065200644AB7 /* CentrifugoIOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5B0121E64065200644AB7 /* CentrifugoIOSUITests.swift */; };
-		26EBD9691E655E8800EB4FD7 /* Centrifuge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26EBD9681E655E8800EB4FD7 /* Centrifuge.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,6 +35,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		267A62921E65F03400B4D18B /* Centrifuge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Centrifuge.framework; sourceTree = "<group>"; };
 		26B5AFEF1E64065200644AB7 /* CentrifugoIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CentrifugoIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		26B5AFF21E64065200644AB7 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		26B5AFF41E64065200644AB7 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -48,7 +49,6 @@
 		26B5B00E1E64065200644AB7 /* CentrifugoIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CentrifugoIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		26B5B0121E64065200644AB7 /* CentrifugoIOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CentrifugoIOSUITests.swift; sourceTree = "<group>"; };
 		26B5B0141E64065200644AB7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		26EBD9681E655E8800EB4FD7 /* Centrifuge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Centrifuge.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,7 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				26EBD9691E655E8800EB4FD7 /* Centrifuge.framework in Frameworks */,
+				267A62931E65F03400B4D18B /* Centrifuge.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,7 +84,7 @@
 				26B5B0061E64065200644AB7 /* CentrifugoIOSTests */,
 				26B5B0111E64065200644AB7 /* CentrifugoIOSUITests */,
 				26B5AFF01E64065200644AB7 /* Products */,
-				26EBD9681E655E8800EB4FD7 /* Centrifuge.framework */,
+				267A62921E65F03400B4D18B /* Centrifuge.framework */,
 			);
 			sourceTree = "<group>";
 		};

@@ -92,14 +92,8 @@ class ViewController: UIViewController {
             messageHandler.setLabel(l: self.label)
             subEventHandler?.onMessage(messageHandler)
             
-            let sub: CentrifugeSub?
-            do {
-                sub = try client?.subscribe("public:chat", events: subEventHandler)
-            } catch {
-                self.label.text = "Error on subscribe"
-                return
-            }
-            
+            let sub = client?.subscribe("public:chat", events: subEventHandler)
+
             DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(3), execute: {
                 do {
                     let data = "{\"input\": \"hello\"}".data(using: .utf8)
