@@ -76,7 +76,10 @@ func main() {
 	events.OnJoin(subEventHandler)
 	events.OnLeave(subEventHandler)
 
-	sub := c.Subscribe("public:chat", events)
+	sub, err := c.Subscribe("public:chat", events)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	data := TestMessage{Input: "example input"}
 	dataBytes, _ := json.Marshal(data)

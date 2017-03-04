@@ -87,7 +87,10 @@ func main() {
 	events.OnSubscribeError(subEventHandler)
 
 	// Subscribe on private channel.
-	c.Subscribe("$public:chat", events)
+	_, err := c.Subscribe("$public:chat", events)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	select {}
 }

@@ -741,7 +741,7 @@ func (c *Client) privateSign(channel string) (*PrivateSign, error) {
 }
 
 // Subscribe allows to subscribe on channel.
-func (c *Client) Subscribe(channel string, events *SubEventHandler) *Sub {
+func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error) {
 	c.subsMutex.Lock()
 	var sub *Sub
 	if _, ok := c.subs[channel]; ok {
@@ -756,18 +756,18 @@ func (c *Client) Subscribe(channel string, events *SubEventHandler) *Sub {
 	if c.Connected() {
 		err := c.subscribe(sub)
 		if err != nil {
-			if sub.events.onSubscribeError != nil {
+			if sub.events != nil && sub.events.onSubscribeError != nil {
 				handler := sub.events.onSubscribeError
 				handler.OnSubscribeError(sub, err)
 			}
 		} else {
-			if sub.events.onSubscribeSuccess != nil {
+			if sub.events != nil && sub.events.onSubscribeSuccess != nil {
 				handler := sub.events.onSubscribeSuccess
 				handler.OnSubscribeSuccess(sub)
 			}
 		}
 	}
-	return sub
+	return sub, nil
 }
 
 func (c *Client) subscribe(sub *Sub) error {

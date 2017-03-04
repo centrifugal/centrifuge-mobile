@@ -1,6 +1,7 @@
 package main
 
-// Demonstrate how to resque from credentials expiration (when connection_lifetime set in Centrifugo).
+// Demonstrate how to resque from credentials expiration
+// (when connection_lifetime set in Centrifugo).
 
 import (
 	"fmt"
@@ -37,10 +38,9 @@ type eventHandler struct {
 	done chan struct{}
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client) error {
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client) {
 	log.Println("Disconnected")
 	close(h.done)
-	return nil
 }
 
 func (h *eventHandler) OnRefresh(c *centrifuge.Client) (*centrifuge.Credentials, error) {
@@ -61,21 +61,19 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 
 	handler := &eventHandler{done}
 
-	events := &centrifuge.EventHandler{
-		OnDisconnect: handler,
-		OnRefresh:    handler,
-	}
+	events := centrifuge.NewEventHandler()
+	events.OnDisconnect(handler)
+	events.OnRefresh(handler)
 
-	c := centrifuge.New(wsURL, creds, events, centrifuge.DefaultConfig)
+	c := centrifuge.New(wsURL, creds, events, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	subEvents := &centrifuge.SubEventHandler{
-		OnMessage: &subEventHandler{},
-	}
+	subEvents := centrifuge.NewSubEventHandler()
+	subEvents.OnMessage(&subEventHandler{})
 
 	_, err = c.Subscribe("public:chat", subEvents)
 	if err != nil {

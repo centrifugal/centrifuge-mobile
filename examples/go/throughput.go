@@ -38,7 +38,7 @@ func newConnection(n int) *centrifuge.Client {
 	}
 
 	wsURL := "ws://localhost:8000/connection/websocket"
-	c := centrifuge.New(wsURL, creds, nil, centrifuge.DefaultConfig)
+	c := centrifuge.New(wsURL, creds, nil, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
@@ -82,13 +82,9 @@ func main() {
 		time.Sleep(time.Millisecond * 10)
 		go func(n int) {
 			c := newConnection(n)
-			events := &centrifuge.SubEventHandler{
-				OnMessage: &subEventHandler{t},
-			}
-			_, err := c.Subscribe("test", events)
-			if err != nil {
-				log.Fatalln(err)
-			}
+			events := centrifuge.NewSubEventHandler()
+			events.OnMessage(&subEventHandler{t})
+			c.Subscribe("test", events)
 			wg.Done()
 			<-done
 		}(i)
@@ -97,7 +93,11 @@ func main() {
 	wg.Wait()
 
 	c := newConnection(numSubscribers + 1)
-	sub, _ := c.Subscribe("test", nil)
+	sub, err := c.Subscribe("test", nil)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	data := map[string]string{"input": "1"}
 	dataBytes, _ := json.Marshal(data)
 

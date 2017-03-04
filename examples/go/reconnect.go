@@ -88,11 +88,11 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 
 	go func() {
 		for {
-			msgs, err := sub.History()
+			history, err := sub.History()
 			if err != nil {
 				log.Printf("Error retreiving channel history: %s", err.Error())
 			} else {
-				log.Printf("%d messages in channel history", len(msgs))
+				log.Printf("%d messages in channel history", history.NumMessages())
 			}
 			time.Sleep(time.Second)
 		}

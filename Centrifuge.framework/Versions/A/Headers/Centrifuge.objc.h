@@ -54,7 +54,7 @@
 - (void)close;
 - (BOOL)connect:(NSError**)error;
 - (BOOL)connected;
-- (CentrifugeSub*)subscribe:(NSString*)channel events:(CentrifugeSubEventHandler*)events;
+- (CentrifugeSub*)subscribe:(NSString*)channel events:(CentrifugeSubEventHandler*)events error:(NSError**)error;
 - (BOOL)subscribed:(NSString*)channel;
 @end
 
