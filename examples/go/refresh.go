@@ -38,7 +38,7 @@ type eventHandler struct {
 	done chan struct{}
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client) {
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
 	log.Println("Disconnected")
 	close(h.done)
 }

@@ -49,13 +49,13 @@ func (h *eventHandler) OnPrivateSub(c *centrifuge.Client, req *centrifuge.Privat
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub) {
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, ctx *centrifuge.SubscribeSuccessContext) {
 	log.Println(fmt.Sprintf("Successfully subscribed on private channel %s", sub.Channel()))
 	os.Exit(0)
 }
 
-func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, err error) {
-	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), err))
+func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, ctx *centrifuge.SubscribeErrorContext) {
+	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), ctx.Error))
 	os.Exit(1)
 }
 

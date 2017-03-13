@@ -235,8 +235,8 @@ func (c *Client) subscribed(channel string) bool {
 	return ok
 }
 
-// ClientID returns client ID of this connection. It only available after connection
-// was established and authorized.
+// ClientID returns client ID of this connection. It only available after
+// connection was established and authorized.
 func (c *Client) ClientID() string {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
