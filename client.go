@@ -51,7 +51,7 @@ var (
 
 const (
 	DefaultPrivateChannelPrefix = "$"
-	DefaultTimeoutMilliseconds  = 1 * 10e3
+	DefaultTimeoutMilliseconds  = 5e3
 )
 
 // Config contains various client options.
@@ -90,12 +90,25 @@ func newPrivateRequest(client string, channel string) *PrivateRequest {
 	}
 }
 
+type ConnectContext struct {
+	ClientID string
+}
+
+type DisconnectContext struct {
+	Reason    string
+	Reconnect bool
+}
+
+type ErrorContext struct {
+	Error string
+}
+
 type ConnectHandler interface {
-	OnConnect(*Client)
+	OnConnect(*Client, *ConnectContext)
 }
 
 type DisconnectHandler interface {
-	OnDisconnect(*Client)
+	OnDisconnect(*Client, *DisconnectContext)
 }
 
 type PrivateSubHandler interface {
@@ -107,7 +120,7 @@ type RefreshHandler interface {
 }
 
 type ErrorHandler interface {
-	OnError(*Client, error)
+	OnError(*Client, *ErrorContext)
 }
 
 type EventHandler struct {
@@ -236,7 +249,7 @@ func (c *Client) handleError(err error) {
 		handler = c.events.onError
 	}
 	if handler != nil {
-		handler.OnError(c, err)
+		handler.OnError(c, &ErrorContext{Error: err.Error()})
 	} else {
 		c.Close()
 	}
@@ -283,9 +296,18 @@ func (c *Client) close() {
 	}
 }
 
+func (c *Client) triggerOnConnect() {
+	if c.events != nil && c.events.onConnect != nil {
+		handler := c.events.onConnect
+		ctx := &ConnectContext{ClientID: c.ClientID()}
+		handler.OnConnect(c, ctx)
+	}
+}
+
 func (c *Client) handleDisconnect(err error) {
 	c.mutex.Lock()
 
+	disconnectReason := "connection closed"
 	ok, _, reason := closeErr(err)
 	if ok {
 		var adv disconnectAdvice
@@ -294,10 +316,11 @@ func (c *Client) handleDisconnect(err error) {
 			if !adv.Reconnect {
 				c.reconnect = false
 			}
+			disconnectReason = adv.Reason
 		}
 	}
 
-	if c.status == CLOSED || c.status == CONNECTING {
+	if c.status == CLOSED {
 		c.mutex.Unlock()
 		return
 	}
@@ -321,6 +344,10 @@ func (c *Client) handleDisconnect(err error) {
 
 	c.status = DISCONNECTED
 
+	for _, s := range c.subs {
+		s.triggerOnUnsubscribe(true)
+	}
+
 	var handler DisconnectHandler
 	if c.events != nil && c.events.onDisconnect != nil {
 		handler = c.events.onDisconnect
@@ -330,9 +357,8 @@ func (c *Client) handleDisconnect(err error) {
 	c.mutex.Unlock()
 
 	if handler != nil {
-		go func() {
-			handler.OnDisconnect(c)
-		}()
+		ctx := &DisconnectContext{Reason: disconnectReason, Reconnect: reconnect}
+		handler.OnDisconnect(c, ctx)
 	}
 
 	if !reconnect {
@@ -341,13 +367,6 @@ func (c *Client) handleDisconnect(err error) {
 	err = c.reconnectStrategy.reconnect(c)
 	if err != nil {
 		c.Close()
-	} else {
-		if c.events != nil && c.events.onConnect != nil {
-			handler := c.events.onConnect
-			go func() {
-				handler.OnConnect(c)
-			}()
-		}
 	}
 }
 
@@ -404,13 +423,12 @@ func (r *backoffReconnect) reconnect(c *Client) error {
 
 func (c *Client) doReconnect() error {
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	c.closed = make(chan struct{})
+	c.mutex.Unlock()
 
 	err := c.connect()
 	if err != nil {
-		close(c.closed)
+		c.close()
 		return err
 	}
 
@@ -435,7 +453,7 @@ func (c *Client) resubscribe() error {
 	return nil
 }
 
-func (c *Client) read() {
+func (c *Client) reader() {
 	for {
 		message, err := c.conn.ReadMessage()
 		if err != nil {
@@ -446,19 +464,17 @@ func (c *Client) read() {
 		case <-c.closed:
 			return
 		default:
-			c.receive <- message
+			err := c.handle(message)
+			if err != nil {
+				c.handleError(err)
+			}
 		}
 	}
 }
 
-func (c *Client) run() {
+func (c *Client) writer() {
 	for {
 		select {
-		case msg := <-c.receive:
-			err := c.handle(msg)
-			if err != nil {
-				c.handleError(err)
-			}
 		case msg := <-c.write:
 			err := c.conn.WriteMessage(msg)
 			if err != nil {
@@ -548,19 +564,26 @@ func (c *Client) handleAsyncResponse(resp response) error {
 	return nil
 }
 
-// Lock must be held outside
 func (c *Client) connect() error {
-
+	c.mutex.Lock()
+	if c.status == CONNECTED {
+		c.mutex.Unlock()
+		return nil
+	}
 	c.status = CONNECTING
+	c.mutex.Unlock()
 
 	conn, err := c.createConn(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond)
 	if err != nil {
 		return err
 	}
 
+	c.mutex.Lock()
 	c.conn = conn
-	go c.run()
-	go c.read()
+	c.mutex.Unlock()
+
+	go c.reader()
+	go c.writer()
 
 	var body connectResponseBody
 
@@ -573,18 +596,26 @@ func (c *Client) connect() error {
 		// Try to refresh credentials and repeat connection attempt.
 		err = c.refreshCredentials()
 		if err != nil {
+			c.Close()
 			return err
 		}
 		body, err = c.sendConnect()
 		if err != nil {
+			c.Close()
 			return err
 		}
 		if body.Expires && body.Expired {
+			c.Close()
 			return ErrClientExpired
 		}
 	}
 
+	c.mutex.Lock()
 	c.clientID = body.Client
+	c.status = CONNECTED
+	c.mutex.Unlock()
+
+	c.triggerOnConnect()
 
 	if body.Expires {
 		go func(interval int64) {
@@ -598,27 +629,34 @@ func (c *Client) connect() error {
 		}(body.TTL)
 	}
 
-	c.status = CONNECTED
-
 	return nil
 }
 
-// Connect connects to Centrifugo and sends connect message to authorize.
+// Connect connects to Centrifugo and sends connect message to authenticate.
 func (c *Client) Connect() error {
 	c.mutex.Lock()
 	if c.status == CONNECTED {
 		c.mutex.Unlock()
 		return ErrClientStatus
 	}
-	err := c.connect()
 	c.mutex.Unlock()
-	if err == nil && c.events != nil && c.events.onConnect != nil {
-		handler := c.events.onConnect
-		go func() {
-			handler.OnConnect(c)
-		}()
-	}
-	return err
+	go func() {
+		err := c.connect()
+		if err != nil {
+			c.handleDisconnect(err)
+			return
+		}
+
+		err = c.resubscribe()
+		if err != nil {
+			// we need just to close the connection and outgoing requests here
+			// but preserve all subscriptions.
+			c.close()
+			c.handleDisconnect(err)
+			return
+		}
+	}()
+	return nil
 }
 
 func (c *Client) refreshCredentials() error {
@@ -754,18 +792,8 @@ func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error
 	c.subsMutex.Unlock()
 
 	if c.Connected() {
-		err := c.subscribe(sub)
-		if err != nil {
-			if sub.events != nil && sub.events.onSubscribeError != nil {
-				handler := sub.events.onSubscribeError
-				handler.OnSubscribeError(sub, err)
-			}
-		} else {
-			if sub.events != nil && sub.events.onSubscribeSuccess != nil {
-				handler := sub.events.onSubscribeSuccess
-				handler.OnSubscribeSuccess(sub)
-			}
-		}
+		err := sub.resubscribe()
+		return sub, err
 	}
 	return sub, nil
 }
@@ -988,9 +1016,6 @@ func (c *Client) unsubscribe(channel string) error {
 	if !body.Status {
 		return ErrBadUnsubscribeStatus
 	}
-	c.subsMutex.Lock()
-	delete(c.subs, channel)
-	c.subsMutex.Unlock()
 	return nil
 }
 

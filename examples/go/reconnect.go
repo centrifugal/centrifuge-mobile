@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime)
 }
 
 func credentials() *centrifuge.Credentials {
@@ -42,13 +42,13 @@ type eventHandler struct {
 	done chan struct{}
 }
 
-func (h *eventHandler) OnConnect(c *centrifuge.Client) {
-	log.Println("Connected")
+func (h *eventHandler) OnConnect(c *centrifuge.Client, ctx *centrifuge.ConnectContext) {
+	log.Printf("Connected with id: %s", ctx.ClientID)
 	return
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client) {
-	log.Println("Disconnected")
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
+	log.Printf("Disconnected: %s", ctx.Reason)
 	return
 }
 
@@ -57,6 +57,14 @@ type subEventHandler struct{}
 func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) error {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
 	return nil
+}
+
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, ctx *centrifuge.SubscribeSuccessContext) {
+	log.Println(fmt.Sprintf("Subscribed on %s", sub.Channel()))
+}
+
+func (h *subEventHandler) OnUnsubscribe(sub *centrifuge.Sub, ctx *centrifuge.UnsubscribeContext) {
+	log.Println(fmt.Sprintf("Unsubscribed from %s", sub.Channel()))
 }
 
 func newConnection(done chan struct{}) *centrifuge.Client {
@@ -79,24 +87,33 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 	}
 
 	subEvents := centrifuge.NewSubEventHandler()
-	subEvents.OnMessage(&subEventHandler{})
+	subHandler := &subEventHandler{}
+	subEvents.OnMessage(subHandler)
+	subEvents.OnSubscribeSuccess(subHandler)
+	subEvents.OnUnsubscribe(subHandler)
 
 	sub, err := c.Subscribe("public:chat", subEvents)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	go func() {
-		for {
-			history, err := sub.History()
-			if err != nil {
-				log.Printf("Error retreiving channel history: %s", err.Error())
-			} else {
-				log.Printf("%d messages in channel history", history.NumMessages())
-			}
-			time.Sleep(time.Second)
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		history, err := sub.History()
+	// 		if err != nil {
+	// 			log.Printf("Error retreiving channel history: %s", err.Error())
+	// 		} else {
+	// 			log.Printf("%d messages in channel history", history.NumMessages())
+	// 		}
+	// 		time.Sleep(time.Second)
+	// 	}
+	// }()
+
+	time.Sleep(time.Second)
+	sub.Unsubscribe()
+
+	time.Sleep(10 * time.Second)
+	sub.Subscribe()
 
 	return c
 }
