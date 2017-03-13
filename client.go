@@ -308,19 +308,25 @@ func (c *Client) handleDisconnect(err error) {
 	c.mutex.Lock()
 
 	disconnectReason := "connection closed"
-	ok, _, reason := closeErr(err)
-	if ok {
-		var adv disconnectAdvice
-		err := json.Unmarshal([]byte(reason), &adv)
-		if err == nil {
-			if !adv.Reconnect {
-				c.reconnect = false
+	if err != nil {
+		ok, _, reason := closeErr(err)
+		if ok {
+			var adv disconnectAdvice
+			err := json.Unmarshal([]byte(reason), &adv)
+			if err == nil {
+				if !adv.Reconnect {
+					c.reconnect = false
+				}
+				disconnectReason = adv.Reason
 			}
-			disconnectReason = adv.Reason
 		}
+	} else {
+		// Disconnect method called.
+		disconnectReason = "client disconnected"
+		c.reconnect = false
 	}
 
-	if c.status == CLOSED {
+	if c.status == CLOSED || c.status == DISCONNECTED {
 		c.mutex.Unlock()
 		return
 	}
@@ -342,6 +348,7 @@ func (c *Client) handleDisconnect(err error) {
 		close(c.closed)
 	}
 
+	prevStatus := c.status
 	c.status = DISCONNECTED
 
 	for _, s := range c.subs {
@@ -356,7 +363,7 @@ func (c *Client) handleDisconnect(err error) {
 	reconnect := c.reconnect
 	c.mutex.Unlock()
 
-	if handler != nil {
+	if handler != nil && prevStatus == CONNECTED {
 		ctx := &DisconnectContext{Reason: disconnectReason, Reconnect: reconnect}
 		handler.OnDisconnect(c, ctx)
 	}
@@ -579,6 +586,10 @@ func (c *Client) connect() error {
 	}
 
 	c.mutex.Lock()
+	if c.status == DISCONNECTED {
+		c.mutex.Unlock()
+		return nil
+	}
 	c.conn = conn
 	c.mutex.Unlock()
 
@@ -639,6 +650,7 @@ func (c *Client) Connect() error {
 		c.mutex.Unlock()
 		return ErrClientStatus
 	}
+	c.reconnect = true
 	c.mutex.Unlock()
 	go func() {
 		err := c.connect()
@@ -656,6 +668,14 @@ func (c *Client) Connect() error {
 			return
 		}
 	}()
+	return nil
+}
+
+func (c *Client) Disconnect() error {
+	c.mutex.Lock()
+	c.reconnect = false
+	c.mutex.Unlock()
+	c.handleDisconnect(nil)
 	return nil
 }
 

@@ -15,18 +15,16 @@ func init() {
 	log.SetFlags(log.Ldate | log.Ltime)
 }
 
+// In production you need to receive credentials from application backend.
 func credentials() *centrifuge.Credentials {
+	// Never show secret to client of your application. Keep it on your application backend only.
 	secret := "secret"
-
 	// Application user ID.
 	user := "42"
-
 	// Current timestamp as string.
 	timestamp := centrifuge.Timestamp()
-
 	// Empty info.
 	info := ""
-
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
@@ -97,23 +95,17 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 		log.Fatalln(err)
 	}
 
-	// go func() {
-	// 	for {
-	// 		history, err := sub.History()
-	// 		if err != nil {
-	// 			log.Printf("Error retreiving channel history: %s", err.Error())
-	// 		} else {
-	// 			log.Printf("%d messages in channel history", history.NumMessages())
-	// 		}
-	// 		time.Sleep(time.Second)
-	// 	}
-	// }()
-
-	time.Sleep(time.Second)
-	sub.Unsubscribe()
-
-	time.Sleep(10 * time.Second)
-	sub.Subscribe()
+	go func() {
+		for {
+			history, err := sub.History()
+			if err != nil {
+				log.Printf("Error retreiving channel history: %s", err.Error())
+			} else {
+				log.Printf("%d messages in channel history", history.NumMessages())
+			}
+			time.Sleep(time.Second)
+		}
+	}()
 
 	return c
 }

@@ -22,7 +22,6 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
 	var m TestMessage
 	err := json.Unmarshal(msg.Data, &m)
-	println(m.Input)
 	return err
 }
 
@@ -36,28 +35,30 @@ func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg *centrifuge.ClientInf
 	return nil
 }
 
-func main() {
+// In production you need to receive credentials from application backend.
+func credentials() *centrifuge.Credentials {
 	// Never show secret to client of your application. Keep it on your application backend only.
 	secret := "secret"
-
 	// Application user ID.
 	user := "42"
-
 	// Current timestamp as string.
 	timestamp := centrifuge.Timestamp()
-
 	// Empty info.
 	info := ""
-
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
-	creds := &centrifuge.Credentials{
+	return &centrifuge.Credentials{
 		User:      user,
 		Timestamp: timestamp,
 		Info:      info,
 		Token:     token,
 	}
+}
+
+func main() {
+	// In production you need to receive credentials from application backend.
+	creds := credentials()
 
 	started := time.Now()
 

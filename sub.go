@@ -245,7 +245,7 @@ func (s *Sub) Subscribe() error {
 
 func (s *Sub) triggerOnUnsubscribe(needResubscribe bool) {
 	s.mu.Lock()
-	if s.status == UNSUBSCRIBED {
+	if s.status == UNSUBSCRIBED || s.status == SUBSCRIBING {
 		s.mu.Unlock()
 		return
 	}
