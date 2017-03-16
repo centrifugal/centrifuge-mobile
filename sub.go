@@ -102,7 +102,6 @@ type Sub struct {
 	recovered       bool
 	err             error
 	subscribeCh     chan struct{}
-	errorCh         chan struct{}
 	needResubscribe bool
 }
 
@@ -112,7 +111,6 @@ func (c *Client) newSub(channel string, events *SubEventHandler) *Sub {
 		channel:         channel,
 		events:          events,
 		subscribeCh:     make(chan struct{}),
-		errorCh:         make(chan struct{}),
 		needResubscribe: true,
 	}
 	return s
@@ -126,16 +124,16 @@ func (s *Sub) Channel() string {
 func (s *Sub) Publish(data []byte) error {
 	s.mu.Lock()
 	subCh := s.subscribeCh
-	errCh := s.errorCh
 	s.mu.Unlock()
 	select {
 	case <-subCh:
-		return s.centrifuge.publish(s.channel, data)
-	case <-errCh:
 		s.mu.Lock()
 		err := s.err
 		s.mu.Unlock()
-		return err
+		if err != nil {
+			return err
+		}
+		return s.centrifuge.publish(s.channel, data)
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
 		return ErrTimeout
 	}
@@ -160,10 +158,15 @@ func (d *HistoryData) MessageAt(i int) *Message {
 func (s *Sub) History() (*HistoryData, error) {
 	s.mu.Lock()
 	subCh := s.subscribeCh
-	errCh := s.errorCh
 	s.mu.Unlock()
 	select {
 	case <-subCh:
+		s.mu.Lock()
+		err := s.err
+		s.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
 		messages, err := s.centrifuge.history(s.channel)
 		if err != nil {
 			return nil, err
@@ -171,11 +174,6 @@ func (s *Sub) History() (*HistoryData, error) {
 		return &HistoryData{
 			messages: messages,
 		}, nil
-	case <-errCh:
-		s.mu.Lock()
-		err := s.err
-		s.mu.Unlock()
-		return nil, err
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
 		return nil, ErrTimeout
 	}
@@ -200,10 +198,15 @@ func (d *PresenceData) ClientAt(i int) *ClientInfo {
 func (s *Sub) Presence() (*PresenceData, error) {
 	s.mu.Lock()
 	subCh := s.subscribeCh
-	errCh := s.errorCh
 	s.mu.Unlock()
 	select {
 	case <-subCh:
+		s.mu.Lock()
+		err := s.err
+		s.mu.Unlock()
+		if err != nil {
+			return nil, err
+		}
 		presence, err := s.centrifuge.presence(s.channel)
 		if err != nil {
 			return nil, err
@@ -217,11 +220,6 @@ func (s *Sub) Presence() (*PresenceData, error) {
 		return &PresenceData{
 			clients: clients,
 		}, nil
-	case <-errCh:
-		s.mu.Lock()
-		err := s.err
-		s.mu.Unlock()
-		return nil, err
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
 		return nil, ErrTimeout
 	}
@@ -245,14 +243,13 @@ func (s *Sub) Subscribe() error {
 
 func (s *Sub) triggerOnUnsubscribe(needResubscribe bool) {
 	s.mu.Lock()
-	if s.status == UNSUBSCRIBED {
+	if s.status != SUBSCRIBED {
 		s.mu.Unlock()
 		return
 	}
 	s.needResubscribe = needResubscribe
 	s.status = UNSUBSCRIBED
 	s.subscribeCh = make(chan struct{})
-	s.errorCh = make(chan struct{})
 	s.mu.Unlock()
 	if s.events != nil && s.events.onUnsubscribe != nil {
 		handler := s.events.onUnsubscribe
@@ -283,7 +280,7 @@ func (s *Sub) subscribeError(err error) {
 	}
 	s.err = err
 	s.status = FAILED
-	close(s.errorCh)
+	close(s.subscribeCh)
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeError != nil {
 		handler := s.events.onSubscribeError
@@ -332,6 +329,14 @@ func (s *Sub) resubscribe() error {
 	if !needResubscribe {
 		return nil
 	}
+
+	s.mu.Lock()
+	select {
+	case <-s.subscribeCh:
+		s.subscribeCh = make(chan struct{})
+	default:
+	}
+	s.mu.Unlock()
 
 	privateSign, err := s.centrifuge.privateSign(s.channel)
 	if err != nil {

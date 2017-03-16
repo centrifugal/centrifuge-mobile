@@ -296,14 +296,6 @@ func (c *Client) close() {
 	}
 }
 
-func (c *Client) triggerOnConnect() {
-	if c.events != nil && c.events.onConnect != nil {
-		handler := c.events.onConnect
-		ctx := &ConnectContext{ClientID: c.ClientID()}
-		handler.OnConnect(c, ctx)
-	}
-}
-
 func (c *Client) handleDisconnect(err error) {
 	c.mutex.Lock()
 
@@ -320,7 +312,9 @@ func (c *Client) handleDisconnect(err error) {
 		}
 	}
 
-	if c.status == CLOSED {
+	prevStatus := c.status
+
+	if prevStatus == DISCONNECTED || prevStatus == CLOSED {
 		c.mutex.Unlock()
 		return
 	}
@@ -348,13 +342,13 @@ func (c *Client) handleDisconnect(err error) {
 		s.triggerOnUnsubscribe(true)
 	}
 
+	reconnect := c.reconnect
+	c.mutex.Unlock()
+
 	var handler DisconnectHandler
 	if c.events != nil && c.events.onDisconnect != nil {
 		handler = c.events.onDisconnect
 	}
-
-	reconnect := c.reconnect
-	c.mutex.Unlock()
 
 	if handler != nil {
 		ctx := &DisconnectContext{Reason: disconnectReason, Reconnect: reconnect}
@@ -612,10 +606,9 @@ func (c *Client) connect() error {
 
 	c.mutex.Lock()
 	c.clientID = body.Client
+	prevStatus := c.status
 	c.status = CONNECTED
 	c.mutex.Unlock()
-
-	c.triggerOnConnect()
 
 	if body.Expires {
 		go func(interval int64) {
@@ -627,6 +620,12 @@ func (c *Client) connect() error {
 				c.sendRefresh()
 			}
 		}(body.TTL)
+	}
+
+	if c.events != nil && c.events.onConnect != nil && prevStatus != CONNECTED {
+		handler := c.events.onConnect
+		ctx := &ConnectContext{ClientID: c.ClientID()}
+		handler.OnConnect(c, ctx)
 	}
 
 	return nil
