@@ -107,12 +107,6 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 		}
 	}()
 
-	time.Sleep(time.Second)
-	sub.Unsubscribe()
-
-	time.Sleep(10 * time.Second)
-	sub.Subscribe()
-
 	return c
 }
 

@@ -86,7 +86,7 @@ func (h *SubEventHandler) OnSubscribeError(handler SubscribeErrorHandler) {
 const (
 	SUBSCRIBING = iota
 	SUBSCRIBED
-	FAILED
+	SUBERROR
 	UNSUBSCRIBED
 )
 
@@ -249,7 +249,6 @@ func (s *Sub) triggerOnUnsubscribe(needResubscribe bool) {
 	}
 	s.needResubscribe = needResubscribe
 	s.status = UNSUBSCRIBED
-	s.subscribeCh = make(chan struct{})
 	s.mu.Unlock()
 	if s.events != nil && s.events.onUnsubscribe != nil {
 		handler := s.events.onUnsubscribe
@@ -274,12 +273,12 @@ func (s *Sub) subscribeSuccess() {
 
 func (s *Sub) subscribeError(err error) {
 	s.mu.Lock()
-	if s.status == FAILED {
+	if s.status == SUBERROR {
 		s.mu.Unlock()
 		return
 	}
 	s.err = err
-	s.status = FAILED
+	s.status = SUBERROR
 	close(s.subscribeCh)
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeError != nil {
@@ -324,18 +323,25 @@ func (s *Sub) handleLeaveMessage(info *ClientInfo) {
 
 func (s *Sub) resubscribe() error {
 	s.mu.Lock()
+	if s.status == SUBSCRIBED {
+		s.mu.Unlock()
+		return nil
+	}
 	needResubscribe := s.needResubscribe
 	s.mu.Unlock()
 	if !needResubscribe {
 		return nil
 	}
 
-	s.mu.Lock()
-	select {
-	case <-s.subscribeCh:
-		s.subscribeCh = make(chan struct{})
-	default:
+	s.centrifuge.mutex.Lock()
+	if s.centrifuge.status != CONNECTED {
+		s.centrifuge.mutex.Unlock()
+		return nil
 	}
+	s.centrifuge.mutex.Unlock()
+
+	s.mu.Lock()
+	s.subscribeCh = make(chan struct{})
 	s.mu.Unlock()
 
 	privateSign, err := s.centrifuge.privateSign(s.channel)

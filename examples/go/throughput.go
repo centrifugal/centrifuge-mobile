@@ -15,28 +15,29 @@ import (
 	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
-func newConnection(n int) *centrifuge.Client {
+// In production you need to receive credentials from application backend.
+func credentials(n int) *centrifuge.Credentials {
+	// Never show secret to client of your application. Keep it on your application backend only.
 	secret := "secret"
-
 	// Application user ID.
 	user := strconv.Itoa(n)
-
 	// Current timestamp as string.
 	timestamp := centrifuge.Timestamp()
-
 	// Empty info.
 	info := ""
-
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
-	creds := &centrifuge.Credentials{
+	return &centrifuge.Credentials{
 		User:      user,
 		Timestamp: timestamp,
 		Info:      info,
 		Token:     token,
 	}
+}
 
+func newConnection(n int) *centrifuge.Client {
+	creds := credentials(n)
 	wsURL := "ws://localhost:8000/connection/websocket"
 	c := centrifuge.New(wsURL, creds, nil, centrifuge.DefaultConfig())
 
