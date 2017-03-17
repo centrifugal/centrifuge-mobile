@@ -267,15 +267,15 @@
 @end
 
 @protocol CentrifugeJoinHandler <NSObject>
-- (BOOL)onJoin:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1 error:(NSError**)error;
+- (void)onJoin:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1;
 @end
 
 @protocol CentrifugeLeaveHandler <NSObject>
-- (BOOL)onLeave:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1 error:(NSError**)error;
+- (void)onLeave:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1;
 @end
 
 @protocol CentrifugeMessageHandler <NSObject>
-- (BOOL)onMessage:(CentrifugeSub*)p0 p1:(CentrifugeMessage*)p1 error:(NSError**)error;
+- (void)onMessage:(CentrifugeSub*)p0 p1:(CentrifugeMessage*)p1;
 @end
 
 @protocol CentrifugePrivateSubHandler <NSObject>
@@ -408,7 +408,7 @@ FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 @property(strong, readonly) id _ref;
 
 - (instancetype)initWithRef:(id)ref;
-- (BOOL)onJoin:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1 error:(NSError**)error;
+- (void)onJoin:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1;
 @end
 
 @interface CentrifugeLeaveHandler : NSObject <goSeqRefInterface, CentrifugeLeaveHandler> {
@@ -416,7 +416,7 @@ FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 @property(strong, readonly) id _ref;
 
 - (instancetype)initWithRef:(id)ref;
-- (BOOL)onLeave:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1 error:(NSError**)error;
+- (void)onLeave:(CentrifugeSub*)p0 p1:(CentrifugeClientInfo*)p1;
 @end
 
 @interface CentrifugeMessageHandler : NSObject <goSeqRefInterface, CentrifugeMessageHandler> {
@@ -424,7 +424,7 @@ FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
 @property(strong, readonly) id _ref;
 
 - (instancetype)initWithRef:(id)ref;
-- (BOOL)onMessage:(CentrifugeSub*)p0 p1:(CentrifugeMessage*)p1 error:(NSError**)error;
+- (void)onMessage:(CentrifugeSub*)p0 p1:(CentrifugeMessage*)p1;
 @end
 
 @interface CentrifugePrivateSubHandler : NSObject <goSeqRefInterface, CentrifugePrivateSubHandler> {
