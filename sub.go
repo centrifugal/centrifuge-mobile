@@ -18,17 +18,17 @@ type UnsubscribeContext struct{}
 
 // MessageHandler is a function to handle messages in channels.
 type MessageHandler interface {
-	OnMessage(*Sub, *Message) error
+	OnMessage(*Sub, *Message)
 }
 
 // JoinHandler is a function to handle join messages.
 type JoinHandler interface {
-	OnJoin(*Sub, *ClientInfo) error
+	OnJoin(*Sub, *ClientInfo)
 }
 
 // LeaveHandler is a function to handle leave messages.
 type LeaveHandler interface {
-	OnLeave(*Sub, *ClientInfo) error
+	OnLeave(*Sub, *ClientInfo)
 }
 
 // UnsubscribeHandler is a function to handle unsubscribe event.

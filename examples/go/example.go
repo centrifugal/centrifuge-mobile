@@ -18,21 +18,16 @@ type TestMessage struct {
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) error {
+func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
-	var m TestMessage
-	err := json.Unmarshal(msg.Data, &m)
-	return err
 }
 
-func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) error {
+func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) {
 	log.Println(fmt.Sprintf("User %s (client ID %s) joined channel %s", msg.User, msg.Client, sub.Channel()))
-	return nil
 }
 
-func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) error {
+func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) {
 	log.Println(fmt.Sprintf("User %s (client ID %s) left channel %s", msg.User, msg.Client, sub.Channel()))
-	return nil
 }
 
 // In production you need to receive credentials from application backend.

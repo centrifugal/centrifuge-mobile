@@ -58,12 +58,11 @@ type subEventHandler struct {
 	throughput *throughput
 }
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) error {
+func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
 	val := atomic.AddInt32(&h.throughput.msgReceived, 1)
 	if val == int32(h.throughput.totalMsg) {
 		close(h.throughput.done)
 	}
-	return nil
 }
 
 func main() {

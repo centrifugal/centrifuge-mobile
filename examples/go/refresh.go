@@ -48,9 +48,8 @@ func (h *eventHandler) OnRefresh(c *centrifuge.Client) (*centrifuge.Credentials,
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) error {
+func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
-	return nil
 }
 
 func newConnection(done chan struct{}) *centrifuge.Client {
