@@ -12,21 +12,19 @@ import (
 )
 
 func init() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime)
 }
 
+// In production you need to receive credentials from application backend.
 func credentials() *centrifuge.Credentials {
+	// Never show secret to client of your application. Keep it on your application backend only.
 	secret := "secret"
-
 	// Application user ID.
 	user := "42"
-
 	// Current timestamp as string.
 	timestamp := centrifuge.Timestamp()
-
 	// Empty info.
 	info := ""
-
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
@@ -42,13 +40,13 @@ type eventHandler struct {
 	done chan struct{}
 }
 
-func (h *eventHandler) OnConnect(c *centrifuge.Client) {
-	log.Println("Connected")
+func (h *eventHandler) OnConnect(c *centrifuge.Client, ctx *centrifuge.ConnectContext) {
+	log.Printf("Connected with id: %s", ctx.ClientID)
 	return
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client) {
-	log.Println("Disconnected")
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
+	log.Printf("Disconnected: %s", ctx.Reason)
 	return
 }
 
@@ -57,6 +55,14 @@ type subEventHandler struct{}
 func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) error {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
 	return nil
+}
+
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, ctx *centrifuge.SubscribeSuccessContext) {
+	log.Println(fmt.Sprintf("Subscribed on %s", sub.Channel()))
+}
+
+func (h *subEventHandler) OnUnsubscribe(sub *centrifuge.Sub, ctx *centrifuge.UnsubscribeContext) {
+	log.Println(fmt.Sprintf("Unsubscribed from %s", sub.Channel()))
 }
 
 func newConnection(done chan struct{}) *centrifuge.Client {
@@ -79,7 +85,10 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 	}
 
 	subEvents := centrifuge.NewSubEventHandler()
-	subEvents.OnMessage(&subEventHandler{})
+	subHandler := &subEventHandler{}
+	subEvents.OnMessage(subHandler)
+	subEvents.OnSubscribeSuccess(subHandler)
+	subEvents.OnUnsubscribe(subHandler)
 
 	sub, err := c.Subscribe("public:chat", subEvents)
 	if err != nil {

@@ -11,18 +11,16 @@ import (
 	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
+// In production you need to receive credentials from application backend.
 func credentials() *centrifuge.Credentials {
+	// Never show secret to client of your application. Keep it on your application backend only.
 	secret := "secret"
-
 	// Application user ID.
 	user := "42"
-
 	// Current timestamp as string.
 	timestamp := centrifuge.Timestamp()
-
 	// Empty info.
 	info := ""
-
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
@@ -38,7 +36,7 @@ type eventHandler struct {
 	done chan struct{}
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client) {
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
 	log.Println("Disconnected")
 	close(h.done)
 }

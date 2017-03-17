@@ -11,18 +11,16 @@ import (
 	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
+// In production you need to receive credentials from application backend.
 func credentials() *centrifuge.Credentials {
+	// Never show secret to client of your application. Keep it on your application backend only.
 	secret := "secret"
-
 	// Application user ID.
 	user := "42"
-
 	// Current timestamp as string.
 	timestamp := centrifuge.Timestamp()
-
 	// Empty info.
 	info := ""
-
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
@@ -49,13 +47,13 @@ func (h *eventHandler) OnPrivateSub(c *centrifuge.Client, req *centrifuge.Privat
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub) {
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, ctx *centrifuge.SubscribeSuccessContext) {
 	log.Println(fmt.Sprintf("Successfully subscribed on private channel %s", sub.Channel()))
 	os.Exit(0)
 }
 
-func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, err error) {
-	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), err))
+func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, ctx *centrifuge.SubscribeErrorContext) {
+	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), ctx.Error))
 	os.Exit(1)
 }
 
