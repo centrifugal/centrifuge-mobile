@@ -13,7 +13,9 @@ import (
 )
 
 // Timestamp is helper function to get current timestamp as
-// string - i.e. in a format Centrifugo expects.
+// string - i.e. in a format Centrifugo expects. Actually in
+// most cases you need an analogue of this function on your
+// app backend when generating client connection token.
 func Timestamp() string {
 	return strconv.FormatInt(time.Now().Unix(), 10)
 }
@@ -26,6 +28,7 @@ type Credentials struct {
 	Token     string
 }
 
+// NewCredentials initializes Credentials.
 func NewCredentials(user, timestamp, info, token string) *Credentials {
 	return &Credentials{
 		User:      user,
@@ -51,7 +54,7 @@ var (
 
 const (
 	DefaultPrivateChannelPrefix = "$"
-	DefaultTimeoutMilliseconds  = 5e3
+	DefaultTimeoutMilliseconds  = 5000
 )
 
 // Config contains various client options.
@@ -236,7 +239,7 @@ func (c *Client) handleError(err error) {
 	}
 }
 
-// Close closes Client connection and clean ups everything.
+// Close closes Client connection and cleans ups everything.
 func (c *Client) Close() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
