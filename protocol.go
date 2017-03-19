@@ -44,6 +44,10 @@ type historyClientCommand struct {
 	Params historyParams `json:"params"`
 }
 
+type pingClientCommand struct {
+	clientCommand
+}
+
 type connectParams struct {
 	User      string `json:"user"`
 	Timestamp string `json:"timestamp"`

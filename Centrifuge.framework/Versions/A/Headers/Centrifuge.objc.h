@@ -88,6 +88,12 @@
 - (void)setPrivateChannelPrefix:(NSString*)v;
 - (BOOL)websocketCompression;
 - (void)setWebsocketCompression:(BOOL)v;
+- (BOOL)ping;
+- (void)setPing:(BOOL)v;
+- (long)pingMilliseconds;
+- (void)setPingMilliseconds:(long)v;
+- (long)pongMilliseconds;
+- (void)setPongMilliseconds:(long)v;
 @end
 
 @interface CentrifugeConnectContext : NSObject <goSeqRefInterface> {
@@ -304,6 +310,8 @@ FOUNDATION_EXPORT const int64_t CentrifugeCLOSED;
 FOUNDATION_EXPORT const int64_t CentrifugeCONNECTED;
 FOUNDATION_EXPORT const int64_t CentrifugeCONNECTING;
 FOUNDATION_EXPORT const int64_t CentrifugeDISCONNECTED;
+FOUNDATION_EXPORT const int64_t CentrifugeDefaultPingMilliseconds;
+FOUNDATION_EXPORT const int64_t CentrifugeDefaultPongMilliseconds;
 FOUNDATION_EXPORT NSString* const CentrifugeDefaultPrivateChannelPrefix;
 FOUNDATION_EXPORT const int64_t CentrifugeDefaultTimeoutMilliseconds;
 FOUNDATION_EXPORT const int64_t CentrifugeSUBERROR;

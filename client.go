@@ -55,6 +55,8 @@ var (
 const (
 	DefaultPrivateChannelPrefix = "$"
 	DefaultTimeoutMilliseconds  = 5000
+	DefaultPingMilliseconds     = 25000
+	DefaultPongMilliseconds     = 10000
 )
 
 // Config contains various client options.
@@ -62,17 +64,21 @@ type Config struct {
 	TimeoutMilliseconds  int
 	PrivateChannelPrefix string
 	WebsocketCompression bool
+	Ping                 bool
+	PingMilliseconds     int
+	PongMilliseconds     int
 }
 
-// DefaultConfig with standard private channel prefix and 1 second timeout.
-var defaultConfig = &Config{
-	PrivateChannelPrefix: DefaultPrivateChannelPrefix,
-	TimeoutMilliseconds:  DefaultTimeoutMilliseconds,
-	WebsocketCompression: false,
-}
-
+// DefaultConfig returns Config with default options.
 func DefaultConfig() *Config {
-	return defaultConfig
+	return &Config{
+		Ping:                 true,
+		PingMilliseconds:     DefaultPingMilliseconds,
+		PongMilliseconds:     DefaultPongMilliseconds,
+		PrivateChannelPrefix: DefaultPrivateChannelPrefix,
+		TimeoutMilliseconds:  DefaultTimeoutMilliseconds,
+		WebsocketCompression: false,
+	}
 }
 
 // Private sign confirmes that client can subscribe on private channel.
@@ -193,6 +199,7 @@ type Client struct {
 	reconnectStrategy reconnectStrategy
 	createConn        connFactory
 	events            *EventHandler
+	delayPing         chan struct{}
 }
 
 func (c *Client) nextMsgID() int32 {
@@ -212,6 +219,7 @@ func New(u string, creds *Credentials, events *EventHandler, config *Config) *Cl
 		reconnectStrategy: defaultBackoffReconnect,
 		createConn:        newWSConnection,
 		events:            events,
+		delayPing:         make(chan struct{}, 32),
 	}
 	return c
 }
@@ -288,7 +296,7 @@ func (c *Client) handleDisconnect(err error) {
 		}
 	} else {
 		// Disconnect method called.
-		disconnectReason = "cleanly disconnected"
+		disconnectReason = "clean disconnect"
 		c.reconnect = false
 	}
 
@@ -405,7 +413,24 @@ func (c *Client) doReconnect() error {
 	return nil
 }
 
-func (c *Client) reader(conn connection) {
+func (c *Client) pinger(closeCh chan struct{}) {
+	timeout := time.Duration(c.config.PingMilliseconds) * time.Millisecond
+	for {
+		select {
+		case <-c.delayPing:
+		case <-time.After(timeout):
+			err := c.sendPing()
+			if err != nil {
+				c.handleDisconnect(err)
+				return
+			}
+		case <-closeCh:
+			return
+		}
+	}
+}
+
+func (c *Client) reader(conn connection, closeCh chan struct{}) {
 	for {
 		message, err := conn.ReadMessage()
 		if err != nil {
@@ -413,9 +438,13 @@ func (c *Client) reader(conn connection) {
 			return
 		}
 		select {
-		case <-c.closed:
+		case <-closeCh:
 			return
 		default:
+			select {
+			case c.delayPing <- struct{}{}:
+			default:
+			}
 			err := c.handle(message)
 			if err != nil {
 				c.handleError(err)
@@ -424,15 +453,16 @@ func (c *Client) reader(conn connection) {
 	}
 }
 
-func (c *Client) writer(conn connection) {
+func (c *Client) writer(conn connection, closeCh chan struct{}) {
 	for {
 		select {
 		case msg := <-c.write:
 			err := conn.WriteMessage(msg)
 			if err != nil {
-				c.handleError(err)
+				c.handleDisconnect(err)
+				return
 			}
-		case <-c.closed:
+		case <-closeCh:
 			return
 		}
 	}
@@ -571,14 +601,15 @@ func (c *Client) connect() error {
 	}
 
 	c.conn = conn
-	c.closed = make(chan struct{})
+	closeCh := make(chan struct{})
+	c.closed = closeCh
 	c.write = make(chan []byte, 64)
 	c.receive = make(chan []byte, 64)
 
 	c.mutex.Unlock()
 
-	go c.reader(conn)
-	go c.writer(conn)
+	go c.reader(conn, closeCh)
+	go c.writer(conn, closeCh)
 
 	var body connectResponseBody
 
@@ -623,6 +654,10 @@ func (c *Client) connect() error {
 		}(body.TTL)
 	}
 
+	if c.config.Ping {
+		go c.pinger(closeCh)
+	}
+
 	if c.events != nil && c.events.onConnect != nil && prevStatus != CONNECTED {
 		handler := c.events.onConnect
 		ctx := &ConnectContext{ClientID: c.clientID()}
@@ -653,6 +688,10 @@ func (c *Client) disconnect(reconnect bool) error {
 func (c *Client) Disconnect() error {
 	c.disconnect(false)
 	return nil
+}
+
+func (c *Client) timeout() time.Duration {
+	return time.Duration(c.config.TimeoutMilliseconds) * time.Millisecond
 }
 
 func (c *Client) refreshCredentials() error {
@@ -695,7 +734,7 @@ func (c *Client) sendRefresh() error {
 	if err != nil {
 		return err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return err
 	}
@@ -741,7 +780,7 @@ func (c *Client) sendConnect() (connectResponseBody, error) {
 	if err != nil {
 		return connectResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return connectResponseBody{}, err
 	}
@@ -858,7 +897,7 @@ func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSig
 	if err != nil {
 		return subscribeResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return subscribeResponseBody{}, err
 	}
@@ -901,7 +940,7 @@ func (c *Client) sendPublish(channel string, data []byte) (publishResponseBody, 
 	if err != nil {
 		return publishResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return publishResponseBody{}, err
 	}
@@ -942,7 +981,7 @@ func (c *Client) sendHistory(channel string) (historyResponseBody, error) {
 	if err != nil {
 		return historyResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return historyResponseBody{}, err
 	}
@@ -983,7 +1022,7 @@ func (c *Client) sendPresence(channel string) (presenceResponseBody, error) {
 	if err != nil {
 		return presenceResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return presenceResponseBody{}, err
 	}
@@ -1026,7 +1065,7 @@ func (c *Client) sendUnsubscribe(channel string) (unsubscribeResponseBody, error
 	if err != nil {
 		return unsubscribeResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes)
+	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
 	if err != nil {
 		return unsubscribeResponseBody{}, err
 	}
@@ -1041,7 +1080,28 @@ func (c *Client) sendUnsubscribe(channel string) (unsubscribeResponseBody, error
 	return body, nil
 }
 
-func (c *Client) sendSync(uid string, msg []byte) (response, error) {
+func (c *Client) sendPing() error {
+	cmd := pingClientCommand{
+		clientCommand: clientCommand{
+			UID:    strconv.Itoa(int(c.nextMsgID())),
+			Method: "ping",
+		},
+	}
+	cmdBytes, err := json.Marshal(cmd)
+	if err != nil {
+		return err
+	}
+	r, err := c.sendSync(cmd.UID, cmdBytes, time.Duration(c.config.PongMilliseconds)*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	if r.Error != "" {
+		return errors.New(r.Error)
+	}
+	return nil
+}
+
+func (c *Client) sendSync(uid string, msg []byte, timeout time.Duration) (response, error) {
 	wait := make(chan response)
 	err := c.addWaiter(uid, wait)
 	defer c.removeWaiter(uid)
@@ -1052,7 +1112,7 @@ func (c *Client) sendSync(uid string, msg []byte) (response, error) {
 	if err != nil {
 		return response{}, err
 	}
-	return c.wait(wait)
+	return c.wait(wait, timeout)
 }
 
 func (c *Client) send(msg []byte) error {
@@ -1082,14 +1142,14 @@ func (c *Client) removeWaiter(uid string) error {
 	return nil
 }
 
-func (c *Client) wait(ch chan response) (response, error) {
+func (c *Client) wait(ch chan response, timeout time.Duration) (response, error) {
 	select {
 	case data, ok := <-ch:
 		if !ok {
 			return response{}, ErrWaiterClosed
 		}
 		return data, nil
-	case <-time.After(time.Duration(c.config.TimeoutMilliseconds) * time.Millisecond):
+	case <-time.After(timeout):
 		return response{}, ErrTimeout
 	case <-c.closed:
 		return response{}, ErrClientDisconnected
