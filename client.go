@@ -61,12 +61,14 @@ const (
 type Config struct {
 	TimeoutMilliseconds  int
 	PrivateChannelPrefix string
+	WebsocketCompression bool
 }
 
 // DefaultConfig with standard private channel prefix and 1 second timeout.
 var defaultConfig = &Config{
 	PrivateChannelPrefix: DefaultPrivateChannelPrefix,
 	TimeoutMilliseconds:  DefaultTimeoutMilliseconds,
+	WebsocketCompression: false,
 }
 
 func DefaultConfig() *Config {
@@ -557,7 +559,7 @@ func (c *Client) connect() error {
 	c.closed = make(chan struct{})
 	c.mutex.Unlock()
 
-	conn, err := c.createConn(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond)
+	conn, err := c.createConn(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond, c.config.WebsocketCompression)
 	if err != nil {
 		return err
 	}

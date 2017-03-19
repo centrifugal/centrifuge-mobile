@@ -86,6 +86,8 @@
 - (void)setTimeoutMilliseconds:(long)v;
 - (NSString*)privateChannelPrefix;
 - (void)setPrivateChannelPrefix:(NSString*)v;
+- (BOOL)websocketCompression;
+- (void)setWebsocketCompression:(BOOL)v;
 @end
 
 @interface CentrifugeConnectContext : NSObject <goSeqRefInterface> {

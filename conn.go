@@ -28,11 +28,14 @@ type wsConn struct {
 	writeTimeout time.Duration
 }
 
-type connFactory func(string, time.Duration) (connection, error)
+type connFactory func(string, time.Duration, bool) (connection, error)
 
-func newWSConnection(url string, writeTimeout time.Duration) (connection, error) {
+func newWSConnection(url string, writeTimeout time.Duration, compression bool) (connection, error) {
 	wsHeaders := http.Header{}
 	dialer := websocket.DefaultDialer
+	if compression {
+		dialer.EnableCompression = true
+	}
 	conn, resp, err := dialer.Dial(url, wsHeaders)
 	if err != nil {
 		return nil, err
