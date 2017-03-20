@@ -32,13 +32,14 @@ func credentials() *centrifuge.Credentials {
 	}
 }
 
-type eventHandler struct {
-	done chan struct{}
+type eventHandler struct{}
+
+func (h *eventHandler) OnConnect(c *centrifuge.Client, ctx *centrifuge.ConnectContext) {
+	log.Println("Connected")
 }
 
 func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
 	log.Println("Disconnected")
-	close(h.done)
 }
 
 func (h *eventHandler) OnRefresh(c *centrifuge.Client) (*centrifuge.Credentials, error) {
@@ -52,15 +53,16 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
 }
 
-func newConnection(done chan struct{}) *centrifuge.Client {
+func newConnection() *centrifuge.Client {
 	creds := credentials()
 	wsURL := "ws://localhost:8000/connection/websocket"
 
-	handler := &eventHandler{done}
+	handler := &eventHandler{}
 
 	events := centrifuge.NewEventHandler()
 	events.OnDisconnect(handler)
 	events.OnRefresh(handler)
+	events.OnConnect(handler)
 
 	c := centrifuge.New(wsURL, creds, events, centrifuge.DefaultConfig())
 
@@ -82,8 +84,6 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 
 func main() {
 	log.Println("Start program")
-	done := make(chan struct{})
-	c := newConnection(done)
-	defer c.Close()
-	<-done
+	newConnection()
+	select {}
 }
