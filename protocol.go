@@ -64,11 +64,11 @@ type refreshParams struct {
 
 type subscribeParams struct {
 	Channel string `json:"channel"`
-	Client  string `json:"client"`
-	Last    string `json:"last"`
-	Recover bool   `json:"recover"`
-	Info    string `json:"info"`
-	Sign    string `json:"sign"`
+	Client  string `json:"client,omitempty"`
+	Last    string `json:"last,omitempty"`
+	Recover bool   `json:"recover,omitempty"`
+	Info    string `json:"info,omitempty"`
+	Sign    string `json:"sign,omitempty"`
 }
 
 type unsubscribeParams struct {
