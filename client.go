@@ -101,39 +101,48 @@ func newPrivateRequest(client string, channel string) *PrivateRequest {
 	}
 }
 
+// ConnectContext is a connect event context passed to OnConnect callback.
 type ConnectContext struct {
 	ClientID string
 }
 
+// DisconnectContext is a disconnect event context passed to OnDisconnect callback.
 type DisconnectContext struct {
 	Reason    string
 	Reconnect bool
 }
 
+// ErrorContext is an error event context passed to OnError callback.
 type ErrorContext struct {
 	Error string
 }
 
+// ConnectHandler is an interface describing how to handle connect event.
 type ConnectHandler interface {
 	OnConnect(*Client, *ConnectContext)
 }
 
+// DisconnectHandler is an interface describing how to handle disconnect event.
 type DisconnectHandler interface {
 	OnDisconnect(*Client, *DisconnectContext)
 }
 
+// PrivateSubHandler is an interface describing how to handle private subscription request.
 type PrivateSubHandler interface {
 	OnPrivateSub(*Client, *PrivateRequest) (*PrivateSign, error)
 }
 
+// RefreshHandler is an interface describing how to connection credentials refresh event.
 type RefreshHandler interface {
 	OnRefresh(*Client) (*Credentials, error)
 }
 
+// ErrorHandler is an interface describing how to handle error event.
 type ErrorHandler interface {
 	OnError(*Client, *ErrorContext)
 }
 
+// EventHandler has all event handlers for client.
 type EventHandler struct {
 	onConnect    ConnectHandler
 	onDisconnect DisconnectHandler
@@ -142,6 +151,7 @@ type EventHandler struct {
 	onError      ErrorHandler
 }
 
+// NewEventHandler initializes new EventHandler.
 func NewEventHandler() *EventHandler {
 	return &EventHandler{}
 }
