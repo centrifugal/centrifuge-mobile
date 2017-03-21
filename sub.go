@@ -139,23 +139,7 @@ func (s *Sub) Publish(data []byte) error {
 	}
 }
 
-type HistoryData struct {
-	messages []Message
-}
-
-func (d *HistoryData) NumMessages() int {
-	return len(d.messages)
-}
-
-func (d *HistoryData) MessageAt(i int) *Message {
-	if i > len(d.messages)-1 {
-		return nil
-	}
-	return &d.messages[i]
-}
-
-// History allows to extract channel history.
-func (s *Sub) History() (*HistoryData, error) {
+func (s *Sub) history() ([]Message, error) {
 	s.mu.Lock()
 	subCh := s.subscribeCh
 	s.mu.Unlock()
@@ -167,35 +151,14 @@ func (s *Sub) History() (*HistoryData, error) {
 		if err != nil {
 			return nil, err
 		}
-		messages, err := s.centrifuge.history(s.channel)
-		if err != nil {
-			return nil, err
-		}
-		return &HistoryData{
-			messages: messages,
-		}, nil
+		return s.centrifuge.history(s.channel)
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
 		return nil, ErrTimeout
 	}
 }
 
-type PresenceData struct {
-	clients []ClientInfo
-}
-
-func (d *PresenceData) NumClients() int {
-	return len(d.clients)
-}
-
-func (d *PresenceData) ClientAt(i int) *ClientInfo {
-	if i > len(d.clients)-1 {
-		return nil
-	}
-	return &d.clients[i]
-}
-
 // Presence allows to extract presence information for channel.
-func (s *Sub) Presence() (*PresenceData, error) {
+func (s *Sub) presence() (map[string]ClientInfo, error) {
 	s.mu.Lock()
 	subCh := s.subscribeCh
 	s.mu.Unlock()
@@ -207,19 +170,7 @@ func (s *Sub) Presence() (*PresenceData, error) {
 		if err != nil {
 			return nil, err
 		}
-		presence, err := s.centrifuge.presence(s.channel)
-		if err != nil {
-			return nil, err
-		}
-		clients := make([]ClientInfo, len(presence))
-		i := 0
-		for _, info := range presence {
-			clients[i] = info
-			i += 1
-		}
-		return &PresenceData{
-			clients: clients,
-		}, nil
+		return s.centrifuge.presence(s.channel)
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
 		return nil, ErrTimeout
 	}
