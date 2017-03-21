@@ -5,15 +5,18 @@ import (
 	"time"
 )
 
+// SubscribeSuccessContext is a subscribe success event context passed to event callback.
 type SubscribeSuccessContext struct {
 	Resubscribed bool
 	Recovered    bool
 }
 
+// SubscribeErrorContext is a subscribe error event context passed to event callback.
 type SubscribeErrorContext struct {
 	Error string
 }
 
+// UnsubscribeContext is a context passed to unsubscribe event callback.
 type UnsubscribeContext struct{}
 
 // MessageHandler is a function to handle messages in channels.
@@ -36,10 +39,12 @@ type UnsubscribeHandler interface {
 	OnUnsubscribe(*Sub, *UnsubscribeContext)
 }
 
+// SubscribeSuccessHandler is a function to handle subscribe success event.
 type SubscribeSuccessHandler interface {
 	OnSubscribeSuccess(*Sub, *SubscribeSuccessContext)
 }
 
+// SubscribeErrorHandler is a function to handle subscribe error event.
 type SubscribeErrorHandler interface {
 	OnSubscribeError(*Sub, *SubscribeErrorContext)
 }
@@ -55,30 +60,37 @@ type SubEventHandler struct {
 	onSubscribeError   SubscribeErrorHandler
 }
 
+// NewSubEventHandler initializes new SubEventHandler.
 func NewSubEventHandler() *SubEventHandler {
 	return &SubEventHandler{}
 }
 
+// OnMessage allows to set MessageHandler to SubEventHandler.
 func (h *SubEventHandler) OnMessage(handler MessageHandler) {
 	h.onMessage = handler
 }
 
+// OnJoin allows to set JoinHandler to SubEventHandler.
 func (h *SubEventHandler) OnJoin(handler JoinHandler) {
 	h.onJoin = handler
 }
 
+// OnLeave allows to set LeaveHandler to SubEventHandler.
 func (h *SubEventHandler) OnLeave(handler LeaveHandler) {
 	h.onLeave = handler
 }
 
+// OnUnsubscribe allows to set UnsubscribeHandler to SubEventHandler.
 func (h *SubEventHandler) OnUnsubscribe(handler UnsubscribeHandler) {
 	h.onUnsubscribe = handler
 }
 
+// OnSubscribeSuccess allows to set SubscribeSuccessHandler to SubEventHandler.
 func (h *SubEventHandler) OnSubscribeSuccess(handler SubscribeSuccessHandler) {
 	h.onSubscribeSuccess = handler
 }
 
+// OnSubscribeError allows to set SubscribeErrorHandler to SubEventHandler.
 func (h *SubEventHandler) OnSubscribeError(handler SubscribeErrorHandler) {
 	h.onSubscribeError = handler
 }
@@ -90,6 +102,7 @@ const (
 	UNSUBSCRIBED
 )
 
+// Sub describes client subscription to channel.
 type Sub struct {
 	mu              sync.Mutex
 	channel         string
@@ -116,11 +129,12 @@ func (c *Client) newSub(channel string, events *SubEventHandler) *Sub {
 	return s
 }
 
+// Channel returns subscription channel.
 func (s *Sub) Channel() string {
 	return s.channel
 }
 
-// Publish JSON encoded data.
+// Publish allows to publish JSON encoded data to subscription channel.
 func (s *Sub) Publish(data []byte) error {
 	s.mu.Lock()
 	subCh := s.subscribeCh
@@ -157,7 +171,6 @@ func (s *Sub) history() ([]Message, error) {
 	}
 }
 
-// Presence allows to extract presence information for channel.
 func (s *Sub) presence() (map[string]ClientInfo, error) {
 	s.mu.Lock()
 	subCh := s.subscribeCh
