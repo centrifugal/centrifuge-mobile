@@ -2,7 +2,7 @@ This library allows to generate Centrifugo client libraries for iOS and Android 
 
 See [examples](https://github.com/centrifugal/centrifuge-mobile/tree/master/examples) to dive into. In that folder you can find how to use this library from Go, also example [iOS app](https://github.com/centrifugal/centrifuge-mobile/tree/master/examples/ios/CentrifugoIOS) and [Android app](https://github.com/centrifugal/centrifuge-mobile/tree/master/examples/android/CentrifugoAndroid) using generated client bindings.
 
-To build for mobile:
+To build for mobile (note that we are ensuring in `mobile` build tag here):
 
 ```
 gomobile bind -target=ios -tags="mobile" github.com/centrifugal/centrifuge-mobile
