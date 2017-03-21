@@ -57,7 +57,7 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message
 }
 
 func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, ctx *centrifuge.SubscribeSuccessContext) {
-	log.Println(fmt.Sprintf("Subscribed on %s", sub.Channel()))
+	log.Println(fmt.Sprintf("Subscribed on %s: recovered %s, resubscribed %s", sub.Channel(), ctx.Recovered, ctx.Resubscribed))
 }
 
 func (h *subEventHandler) OnUnsubscribe(sub *centrifuge.Sub, ctx *centrifuge.UnsubscribeContext) {

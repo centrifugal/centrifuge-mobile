@@ -6,8 +6,8 @@ import (
 )
 
 type SubscribeSuccessContext struct {
-	IsResubscribe bool
-	Recovered     bool
+	Resubscribed bool
+	Recovered    bool
 }
 
 type SubscribeErrorContext struct {
@@ -98,7 +98,7 @@ type Sub struct {
 	events          *SubEventHandler
 	lastMessageID   *string
 	lastMessageMu   sync.RWMutex
-	isResubscribe   bool
+	resubscribed    bool
 	recovered       bool
 	err             error
 	subscribeCh     chan struct{}
@@ -256,7 +256,7 @@ func (s *Sub) triggerOnUnsubscribe(needResubscribe bool) {
 	}
 }
 
-func (s *Sub) subscribeSuccess() {
+func (s *Sub) subscribeSuccess(recovered bool) {
 	s.mu.Lock()
 	if s.status == SUBSCRIBED {
 		s.mu.Unlock()
@@ -264,11 +264,15 @@ func (s *Sub) subscribeSuccess() {
 	}
 	s.status = SUBSCRIBED
 	close(s.subscribeCh)
+	resubscribed := s.resubscribed
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeSuccess != nil {
 		handler := s.events.onSubscribeSuccess
-		handler.OnSubscribeSuccess(s, &SubscribeSuccessContext{})
+		handler.OnSubscribeSuccess(s, &SubscribeSuccessContext{Resubscribed: resubscribed, Recovered: recovered})
 	}
+	s.mu.Lock()
+	s.resubscribed = true
+	s.mu.Unlock()
 }
 
 func (s *Sub) subscribeError(err error) {
@@ -376,7 +380,7 @@ func (s *Sub) resubscribe() error {
 		s.lastMessageMu.Unlock()
 	}
 
-	s.subscribeSuccess()
+	s.subscribeSuccess(body.Recovered)
 
 	return nil
 }
