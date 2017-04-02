@@ -249,8 +249,8 @@
 @property(strong, readonly) id _ref;
 
 - (id)initWithRef:(id)ref;
-- (BOOL)isResubscribe;
-- (void)setIsResubscribe:(BOOL)v;
+- (BOOL)resubscribed;
+- (void)setResubscribed:(BOOL)v;
 - (BOOL)recovered;
 - (void)setRecovered:(BOOL)v;
 @end
