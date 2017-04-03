@@ -362,13 +362,13 @@ type reconnectStrategy interface {
 type backoffReconnect struct {
 	// NumReconnect is maximum number of reconnect attempts, 0 means reconnect forever.
 	NumReconnect int
-	//Factor is the multiplying factor for each increment step.
+	// Factor is the multiplying factor for each increment step.
 	Factor float64
-	//Jitter eases contention by randomizing backoff steps.
+	// Jitter eases contention by randomizing backoff steps.
 	Jitter bool
-	//Min is a minimum value of the reconnect interval.
+	// MinMilliseconds is a minimum value of the reconnect interval.
 	MinMilliseconds int
-	//Max is a maximum value of the reconnect interval.
+	// MaxMilliseconds is a maximum value of the reconnect interval.
 	MaxMilliseconds int
 }
 
