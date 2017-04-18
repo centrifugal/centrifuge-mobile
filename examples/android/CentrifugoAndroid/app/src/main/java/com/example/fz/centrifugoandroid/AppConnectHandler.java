@@ -5,6 +5,7 @@ import android.widget.TextView;
 import android.content.Context;
 import android.app.Activity;
 import centrifuge.Client;
+import centrifuge.ConnectContext;
 import centrifuge.ConnectHandler;
 
 public class AppConnectHandler implements ConnectHandler {
@@ -15,7 +16,7 @@ public class AppConnectHandler implements ConnectHandler {
     }
 
     @Override
-    public void onConnect(Client client) {
+    public void onConnect(Client client, ConnectContext connectContext) {
         context.runOnUiThread(new Runnable() {
             @Override
             public void run() {

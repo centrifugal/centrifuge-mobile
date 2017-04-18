@@ -5,6 +5,7 @@ import android.widget.TextView;
 import android.content.Context;
 import android.app.Activity;
 import centrifuge.Client;
+import centrifuge.DisconnectContext;
 import centrifuge.DisconnectHandler;
 
 public class AppDisconnectHandler implements DisconnectHandler {
@@ -15,7 +16,7 @@ public class AppDisconnectHandler implements DisconnectHandler {
     }
 
     @Override
-    public void onDisconnect(Client client) {
+    public void onDisconnect(Client client, DisconnectContext disconnectContext) {
         context.runOnUiThread(new Runnable() {
             @Override
             public void run() {

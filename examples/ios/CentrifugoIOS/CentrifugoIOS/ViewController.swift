@@ -16,7 +16,7 @@ class ConnectHandler : NSObject, CentrifugeConnectHandlerProtocol {
         self.l = l
     }
     
-    func onConnect(_ p0: CentrifugeClient!) {
+    func onConnect(_ p0: CentrifugeClient!, p1: CentrifugeConnectContext!) {
         DispatchQueue.main.async{
             self.l.text = "Connected";
         }
@@ -30,7 +30,7 @@ class DisconnectHandler : NSObject, CentrifugeDisconnectHandlerProtocol {
         self.l = l
     }
     
-    func onDisconnect(_ p0: CentrifugeClient!) {
+    func onDisconnect(_ p0: CentrifugeClient!, p1: CentrifugeDisconnectContext!) {
         DispatchQueue.main.async{
             self.l.text = "Disconnected";
         }
@@ -44,7 +44,7 @@ class MessageHandler : NSObject, CentrifugeMessageHandlerProtocol {
         self.l = l
     }
     
-    func onMessage(_ p0: CentrifugeSub!, p1: CentrifugeMessage!) throws {
+    func onMessage(_ p0: CentrifugeSub!, p1: CentrifugeMessage!) {
         DispatchQueue.main.async{
             self.l.text = p1.data()
         }

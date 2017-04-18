@@ -16,7 +16,7 @@ public class AppMessageHandler implements MessageHandler {
     }
 
     @Override
-    public void onMessage(Sub sub, final Message message) throws Exception {
+    public void onMessage(Sub sub, final Message message) {
         context.runOnUiThread(new Runnable() {
             @Override
             public void run() {

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		260A85971E6B3E3300765DF8 /* Centrifuge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 260A85961E6B3E3300765DF8 /* Centrifuge.framework */; };
+		26200F871EA5EE61004099E5 /* Centrifuge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 26200F861EA5EE61004099E5 /* Centrifuge.framework */; };
 		26B5AFF31E64065200644AB7 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5AFF21E64065200644AB7 /* AppDelegate.swift */; };
 		26B5AFF51E64065200644AB7 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26B5AFF41E64065200644AB7 /* ViewController.swift */; };
 		26B5AFF81E64065200644AB7 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 26B5AFF61E64065200644AB7 /* Main.storyboard */; };
@@ -35,7 +35,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		260A85961E6B3E3300765DF8 /* Centrifuge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Centrifuge.framework; sourceTree = "<group>"; };
+		26200F861EA5EE61004099E5 /* Centrifuge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Centrifuge.framework; sourceTree = "<group>"; };
 		26B5AFEF1E64065200644AB7 /* CentrifugoIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CentrifugoIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		26B5AFF21E64065200644AB7 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		26B5AFF41E64065200644AB7 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -56,7 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				260A85971E6B3E3300765DF8 /* Centrifuge.framework in Frameworks */,
+				26200F871EA5EE61004099E5 /* Centrifuge.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,7 +84,7 @@
 				26B5B0061E64065200644AB7 /* CentrifugoIOSTests */,
 				26B5B0111E64065200644AB7 /* CentrifugoIOSUITests */,
 				26B5AFF01E64065200644AB7 /* Products */,
-				260A85961E6B3E3300765DF8 /* Centrifuge.framework */,
+				26200F861EA5EE61004099E5 /* Centrifuge.framework */,
 			);
 			sourceTree = "<group>";
 		};
