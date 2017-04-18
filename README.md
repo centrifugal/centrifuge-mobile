@@ -1,5 +1,7 @@
 This library allows to generate Centrifugo client libraries for iOS and Android using [gomobile](https://github.com/golang/mobile/) tool. Also it can be used directly from Go applications.
 
+Gomobile is cool but **experimental** project so you may better use our native libraries for [iOS](https://github.com/centrifugal/centrifuge-ios) and [Android](https://github.com/centrifugal/centrifuge-android). But as they are supported by Centrifugo community members they lack some features (your contributions are really appreciated). This repo contains **full-featured** Centrifugo client for all platforms.
+
 See [examples](https://github.com/centrifugal/centrifuge-mobile/tree/master/examples) to dive into. In that folder you can find how to use this library from Go, also example [iOS app](https://github.com/centrifugal/centrifuge-mobile/tree/master/examples/ios/CentrifugoIOS) and [Android app](https://github.com/centrifugal/centrifuge-mobile/tree/master/examples/android/CentrifugoAndroid) using generated client bindings.
 
 To build for mobile (note that we are ensuring in `mobile` build tag here):
