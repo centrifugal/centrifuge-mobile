@@ -14,6 +14,7 @@ For contributors
 Mobile and Go versions have some differences to be a bit more performant when using library directly from Go. So to build bindings for mobile platforms we are ensuring in `mobile` build tag this way:
 
 ```
+gomobile init -ndk ~/PATH/TO/ANDROID/NDK
 gomobile bind -target=ios -tags="mobile" github.com/centrifugal/centrifuge-mobile
 gomobile bind -target=android -tags="mobile" github.com/centrifugal/centrifuge-mobile
 ```

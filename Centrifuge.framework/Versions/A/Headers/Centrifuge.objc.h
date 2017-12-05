@@ -489,7 +489,7 @@ FOUNDATION_EXPORT const int64_t CentrifugeUNSUBSCRIBED;
 /**
  * DefaultConfig returns Config with default options.
  */
-FOUNDATION_EXPORT CentrifugeConfig* CentrifugeDefaultConfig();
+FOUNDATION_EXPORT CentrifugeConfig* CentrifugeDefaultConfig(void);
 
 /**
  * New initializes Client struct. It accepts URL to Centrifugo server,
@@ -505,12 +505,12 @@ FOUNDATION_EXPORT CentrifugeCredentials* CentrifugeNewCredentials(NSString* user
 /**
  * NewEventHandler initializes new EventHandler.
  */
-FOUNDATION_EXPORT CentrifugeEventHandler* CentrifugeNewEventHandler();
+FOUNDATION_EXPORT CentrifugeEventHandler* CentrifugeNewEventHandler(void);
 
 /**
  * NewSubEventHandler initializes new SubEventHandler.
  */
-FOUNDATION_EXPORT CentrifugeSubEventHandler* CentrifugeNewSubEventHandler();
+FOUNDATION_EXPORT CentrifugeSubEventHandler* CentrifugeNewSubEventHandler(void);
 
 /**
  * Timestamp is helper function to get current timestamp as
@@ -518,7 +518,7 @@ string - i.e. in a format Centrifugo expects. Actually in
 most cases you need an analogue of this function on your
 app backend when generating client connection token.
  */
-FOUNDATION_EXPORT NSString* CentrifugeTimestamp();
+FOUNDATION_EXPORT NSString* CentrifugeTimestamp(void);
 
 @class CentrifugeConnectHandler;
 
