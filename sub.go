@@ -114,8 +114,8 @@ type Sub struct {
 	resubscribed    bool
 	recovered       bool
 	err             error
-	subscribeCh     chan struct{}
 	needResubscribe bool
+	subFutures      []chan error
 }
 
 func (c *Client) newSub(channel string, events *SubEventHandler) *Sub {
@@ -123,7 +123,7 @@ func (c *Client) newSub(channel string, events *SubEventHandler) *Sub {
 		centrifuge:      c,
 		channel:         channel,
 		events:          events,
-		subscribeCh:     make(chan struct{}),
+		subFutures:      make([]chan error, 0),
 		needResubscribe: true,
 	}
 	return s
@@ -134,57 +134,81 @@ func (s *Sub) Channel() string {
 	return s.channel
 }
 
+func (s *Sub) newSubFuture() chan error {
+	fut := make(chan error, 1)
+	s.mu.Lock()
+	if s.status == SUBSCRIBED {
+		fut <- nil
+	} else if s.status == SUBERROR {
+		fut <- s.err
+	} else {
+		s.subFutures = append(s.subFutures, fut)
+	}
+	s.mu.Unlock()
+	return fut
+}
+
+// Sub.mu lock must be held outside.
+func (s *Sub) resolveSubFutures(err error) {
+	for _, ch := range s.subFutures {
+		select {
+		case ch <- nil:
+		default:
+		}
+	}
+	s.subFutures = nil
+}
+
+func (s *Sub) removeSubFuture(subFuture chan error) {
+	s.mu.Lock()
+	for i, v := range s.subFutures {
+		if v == subFuture {
+			s.subFutures = append(s.subFutures[:i], s.subFutures[i+1:]...)
+			break
+		}
+	}
+	s.mu.Unlock()
+}
+
 // Publish allows to publish JSON encoded data to subscription channel.
 func (s *Sub) Publish(data []byte) error {
-	s.mu.Lock()
-	subCh := s.subscribeCh
-	s.mu.Unlock()
+	subFuture := s.newSubFuture()
 	select {
-	case <-subCh:
-		s.mu.Lock()
-		err := s.err
-		s.mu.Unlock()
+	case err := <-subFuture:
 		if err != nil {
 			return err
 		}
 		return s.centrifuge.publish(s.channel, data)
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
+		s.removeSubFuture(subFuture)
 		return ErrTimeout
 	}
 }
 
 func (s *Sub) history() ([]Message, error) {
-	s.mu.Lock()
-	subCh := s.subscribeCh
-	s.mu.Unlock()
+	subFuture := s.newSubFuture()
 	select {
-	case <-subCh:
-		s.mu.Lock()
-		err := s.err
-		s.mu.Unlock()
+	case err := <-subFuture:
 		if err != nil {
 			return nil, err
 		}
 		return s.centrifuge.history(s.channel)
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
+		s.removeSubFuture(subFuture)
 		return nil, ErrTimeout
 	}
 }
 
 func (s *Sub) presence() (map[string]ClientInfo, error) {
-	s.mu.Lock()
-	subCh := s.subscribeCh
-	s.mu.Unlock()
+	subFuture := s.newSubFuture()
 	select {
-	case <-subCh:
-		s.mu.Lock()
-		err := s.err
-		s.mu.Unlock()
+	case err := <-subFuture:
 		if err != nil {
 			return nil, err
 		}
 		return s.centrifuge.presence(s.channel)
 	case <-time.After(time.Duration(s.centrifuge.config.TimeoutMilliseconds) * time.Millisecond):
+		s.removeSubFuture(subFuture)
 		return nil, ErrTimeout
 	}
 }
@@ -227,8 +251,8 @@ func (s *Sub) subscribeSuccess(recovered bool) {
 		return
 	}
 	s.status = SUBSCRIBED
-	close(s.subscribeCh)
 	resubscribed := s.resubscribed
+	s.resolveSubFutures(nil)
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeSuccess != nil {
 		handler := s.events.onSubscribeSuccess
@@ -247,7 +271,7 @@ func (s *Sub) subscribeError(err error) {
 	}
 	s.err = err
 	s.status = SUBERROR
-	close(s.subscribeCh)
+	s.resolveSubFutures(err)
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeError != nil {
 		handler := s.events.onSubscribeError
@@ -308,10 +332,6 @@ func (s *Sub) resubscribe() error {
 	}
 	s.centrifuge.mutex.Unlock()
 
-	s.mu.Lock()
-	s.subscribeCh = make(chan struct{})
-	s.mu.Unlock()
-
 	privateSign, err := s.centrifuge.privateSign(s.channel)
 	if err != nil {
 		return err
@@ -330,6 +350,7 @@ func (s *Sub) resubscribe() error {
 		return err
 	}
 	if !body.Status {
+		s.subscribeError(ErrBadSubscribeStatus)
 		return ErrBadSubscribeStatus
 	}
 
