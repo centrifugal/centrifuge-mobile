@@ -88,13 +88,13 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Printf("%d messages in channel %s history", history.NumMessages(), sub.Channel())
+	log.Printf("%d messages in channel %s history", len(history), sub.Channel())
 
 	presence, err := sub.Presence()
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Printf("%d clients in channel %s", presence.NumClients(), sub.Channel())
+	log.Printf("%d clients in channel %s", len(presence), sub.Channel())
 
 	err = sub.Unsubscribe()
 	if err != nil {

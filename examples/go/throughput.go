@@ -103,7 +103,10 @@ func main() {
 
 	started := time.Now()
 	for i := 0; i < numPublish; i++ {
-		sub.Publish(dataBytes)
+		err := sub.Publish(dataBytes)
+		if err != nil {
+			panic(err)
+		}
 	}
 	<-done
 	elapsed := time.Since(started)
