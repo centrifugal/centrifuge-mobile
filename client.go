@@ -289,26 +289,28 @@ func (c *Client) close() {
 	}
 }
 
-func (c *Client) handleDisconnect(err error) {
-	c.mutex.Lock()
-	disconnectReason := "connection closed"
+func extractAdvice(err error) *disconnectAdvice {
+	adv := &disconnectAdvice{
+		Reason:    "connection closed",
+		Reconnect: true,
+	}
 	if err != nil {
 		ok, _, reason := closeErr(err)
 		if ok {
-			var adv disconnectAdvice
-			err := json.Unmarshal([]byte(reason), &adv)
+			var closeAdvice disconnectAdvice
+			err := json.Unmarshal([]byte(reason), &closeAdvice)
 			if err == nil {
-				if !adv.Reconnect {
-					c.reconnect = false
-				}
-				disconnectReason = adv.Reason
+				adv.Reason = closeAdvice.Reason
+				adv.Reconnect = closeAdvice.Reconnect
 			}
 		}
-	} else {
-		// Disconnect method called.
-		disconnectReason = "clean disconnect"
-		c.reconnect = false
 	}
+	return adv
+}
+
+func (c *Client) handleDisconnect(adv *disconnectAdvice) {
+	c.mutex.Lock()
+	c.reconnect = adv.Reconnect
 
 	if c.status == DISCONNECTED || c.status == CLOSED {
 		if c.conn != nil {
@@ -342,14 +344,14 @@ func (c *Client) handleDisconnect(err error) {
 	}
 
 	if handler != nil {
-		ctx := &DisconnectContext{Reason: disconnectReason, Reconnect: reconnect}
+		ctx := &DisconnectContext{Reason: adv.Reason, Reconnect: reconnect}
 		handler.OnDisconnect(c, ctx)
 	}
 
 	if !reconnect {
 		return
 	}
-	err = c.reconnectStrategy.reconnect(c)
+	err := c.reconnectStrategy.reconnect(c)
 	if err != nil {
 		c.Close()
 	}
@@ -388,13 +390,14 @@ func (r *backoffReconnect) reconnect(c *Client) error {
 		Jitter: r.Jitter,
 	}
 	reconnects := 0
+
 	for {
 		if r.NumReconnect > 0 && reconnects >= r.NumReconnect {
 			break
 		}
 		time.Sleep(b.Duration())
 
-		reconnects += 1
+		reconnects++
 		err := c.doReconnect()
 		if err != nil {
 			continue
@@ -407,6 +410,7 @@ func (r *backoffReconnect) reconnect(c *Client) error {
 }
 
 func (c *Client) doReconnect() error {
+
 	err := c.connect()
 	if err != nil {
 		c.close()
@@ -431,7 +435,8 @@ func (c *Client) pinger(closeCh chan struct{}) {
 		case <-time.After(timeout):
 			err := c.sendPing()
 			if err != nil {
-				c.handleDisconnect(err)
+				adv := extractAdvice(err)
+				c.handleDisconnect(adv)
 				return
 			}
 		case <-closeCh:
@@ -444,7 +449,8 @@ func (c *Client) reader(conn connection, closeCh chan struct{}) {
 	for {
 		message, err := conn.ReadMessage()
 		if err != nil {
-			c.handleDisconnect(err)
+			adv := extractAdvice(err)
+			c.handleDisconnect(adv)
 			return
 		}
 		select {
@@ -469,7 +475,8 @@ func (c *Client) writer(conn connection, closeCh chan struct{}) {
 		case msg := <-c.write:
 			err := conn.WriteMessage(msg)
 			if err != nil {
-				c.handleDisconnect(err)
+				adv := extractAdvice(err)
+				c.handleDisconnect(adv)
 				return
 			}
 		case <-closeCh:
@@ -573,16 +580,17 @@ func (c *Client) Connect() error {
 
 	err := c.connect()
 	if err != nil {
-		c.handleDisconnect(err)
+		adv := extractAdvice(err)
+		c.handleDisconnect(adv)
 		return nil
 	}
-
 	err = c.resubscribe()
 	if err != nil {
 		// we need just to close the connection and outgoing requests here
 		// but preserve all subscriptions.
 		c.close()
-		c.handleDisconnect(err)
+		adv := extractAdvice(err)
+		c.handleDisconnect(adv)
 		return nil
 	}
 
@@ -691,10 +699,14 @@ func (c *Client) disconnect(reconnect bool) error {
 	c.mutex.Lock()
 	c.reconnect = reconnect
 	c.mutex.Unlock()
-	c.handleDisconnect(nil)
+	c.handleDisconnect(&disconnectAdvice{
+		Reconnect: reconnect,
+		Reason:    "clean disconnect",
+	})
 	return nil
 }
 
+// Disconnect client from Centrifugo.
 func (c *Client) Disconnect() error {
 	c.disconnect(false)
 	return nil
@@ -821,6 +833,28 @@ func (c *Client) privateSign(channel string) (*PrivateSign, error) {
 		}
 	}
 	return ps, nil
+}
+
+// SubscribeAsync allows to subscribe on channel.
+func (c *Client) SubscribeAsync(channel string, events *SubEventHandler) *Sub {
+	c.subsMutex.Lock()
+	var sub *Sub
+	if _, ok := c.subs[channel]; ok {
+		sub = c.subs[channel]
+		sub.events = events
+	} else {
+		sub = c.newSub(channel, events)
+	}
+	c.subs[channel] = sub
+	c.subsMutex.Unlock()
+
+	go func() {
+		err := sub.resubscribe()
+		if err != nil {
+			c.disconnect(true)
+		}
+	}()
+	return sub
 }
 
 // Subscribe allows to subscribe on channel.
