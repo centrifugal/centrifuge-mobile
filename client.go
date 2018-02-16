@@ -686,6 +686,8 @@ func (c *Client) connect() error {
 }
 
 func (c *Client) resubscribe() error {
+	c.subsMutex.RLock()
+	defer c.subsMutex.RUnlock()
 	for _, sub := range c.subs {
 		err := sub.resubscribe()
 		if err != nil {
