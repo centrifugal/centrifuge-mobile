@@ -264,7 +264,13 @@ func (c *Client) Close() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	if c.status == CONNECTED {
+		c.subsMutex.RLock()
+		unsubs := make(map[string]*Sub, len(c.subs))
 		for ch, sub := range c.subs {
+			unsubs[ch] = sub
+		}
+		c.subsMutex.RUnlock()
+		for ch, sub := range unsubs {
 			c.unsubscribe(sub.Channel())
 			delete(c.subs, ch)
 		}
@@ -331,7 +337,14 @@ func (c *Client) handleDisconnect(adv *disconnectAdvice) {
 	close(c.closed)
 	c.status = DISCONNECTED
 
+	c.subsMutex.RLock()
+	unsubs := make([]*Sub, 0, len(c.subs))
 	for _, s := range c.subs {
+		unsubs = append(unsubs, s)
+	}
+	c.subsMutex.RUnlock()
+
+	for _, s := range unsubs {
 		s.triggerOnUnsubscribe(true)
 	}
 
