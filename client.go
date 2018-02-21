@@ -334,7 +334,11 @@ func (c *Client) handleDisconnect(adv *disconnectAdvice) {
 	}
 	c.waitersMutex.Unlock()
 
-	close(c.closed)
+	select {
+	case <-c.closed:
+	default:
+		close(c.closed)
+	}
 	c.status = DISCONNECTED
 
 	c.subsMutex.RLock()
