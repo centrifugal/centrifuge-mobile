@@ -96,7 +96,8 @@ func (h *SubEventHandler) OnSubscribeError(handler SubscribeErrorHandler) {
 }
 
 const (
-	SUBSCRIBING = iota
+	NEW = iota
+	SUBSCRIBING
 	SUBSCRIBED
 	SUBERROR
 	UNSUBSCRIBED
@@ -224,7 +225,6 @@ func (s *Sub) Unsubscribe() error {
 func (s *Sub) Subscribe() error {
 	s.mu.Lock()
 	s.needResubscribe = true
-	s.status = SUBSCRIBING
 	s.mu.Unlock()
 	return s.resubscribe()
 }
@@ -315,7 +315,7 @@ func (s *Sub) handleLeaveMessage(info *ClientInfo) {
 
 func (s *Sub) resubscribe() error {
 	s.mu.Lock()
-	if s.status == SUBSCRIBED {
+	if s.status == SUBSCRIBED || s.status == SUBSCRIBING {
 		s.mu.Unlock()
 		return nil
 	}
@@ -331,6 +331,10 @@ func (s *Sub) resubscribe() error {
 		return nil
 	}
 	s.centrifuge.mutex.Unlock()
+
+	s.mu.Lock()
+	s.status = SUBSCRIBING
+	s.mu.Unlock()
 
 	privateSign, err := s.centrifuge.privateSign(s.channel)
 	if err != nil {

@@ -112,11 +112,18 @@
  * Connect connects to Centrifugo and sends connect message to authenticate.
  */
 - (BOOL)connect:(NSError**)error;
+/**
+ * Disconnect client from Centrifugo.
+ */
 - (BOOL)disconnect:(NSError**)error;
 /**
  * Subscribe allows to subscribe on channel.
  */
 - (CentrifugeSub*)subscribe:(NSString*)channel events:(CentrifugeSubEventHandler*)events error:(NSError**)error;
+/**
+ * SubscribeAsync allows to subscribe on channel.
+ */
+- (CentrifugeSub*)subscribeAsync:(NSString*)channel events:(CentrifugeSubEventHandler*)events;
 @end
 
 @interface CentrifugeClientInfo : NSObject <goSeqRefInterface> {
@@ -445,6 +452,7 @@ FOUNDATION_EXPORT const int64_t CentrifugeDefaultPingMilliseconds;
 FOUNDATION_EXPORT const int64_t CentrifugeDefaultPongMilliseconds;
 FOUNDATION_EXPORT NSString* const CentrifugeDefaultPrivateChannelPrefix;
 FOUNDATION_EXPORT const int64_t CentrifugeDefaultTimeoutMilliseconds;
+FOUNDATION_EXPORT const int64_t CentrifugeNEW;
 FOUNDATION_EXPORT const int64_t CentrifugeSUBERROR;
 FOUNDATION_EXPORT const int64_t CentrifugeSUBSCRIBED;
 FOUNDATION_EXPORT const int64_t CentrifugeSUBSCRIBING;
