@@ -353,10 +353,6 @@ func (s *Sub) resubscribe() error {
 		s.subscribeError(err)
 		return err
 	}
-	if !body.Status {
-		s.subscribeError(ErrBadSubscribeStatus)
-		return ErrBadSubscribeStatus
-	}
 
 	if len(body.Messages) > 0 {
 		for i := len(body.Messages) - 1; i >= 0; i-- {

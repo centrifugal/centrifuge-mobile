@@ -5,7 +5,7 @@ import (
 )
 
 type clientCommand struct {
-	UID    string `json:"uid"`
+	ID     int32  `json:"id"`
 	Method string `json:"method"`
 }
 
@@ -49,17 +49,17 @@ type pingClientCommand struct {
 }
 
 type connectParams struct {
-	User      string `json:"user"`
-	Timestamp string `json:"timestamp"`
-	Info      string `json:"info"`
-	Token     string `json:"token"`
+	User string `json:"user"`
+	Exp  string `json:"exp"`
+	Info string `json:"info"`
+	Sign string `json:"sign"`
 }
 
 type refreshParams struct {
-	User      string `json:"user"`
-	Timestamp string `json:"timestamp"`
-	Info      string `json:"info"`
-	Token     string `json:"token"`
+	User string `json:"user"`
+	Exp  string `json:"exp"`
+	Info string `json:"info"`
+	Sign string `json:"sign"`
 }
 
 type subscribeParams struct {
@@ -89,10 +89,9 @@ type historyParams struct {
 }
 
 type response struct {
-	UID    string          `json:"uid,omitempty"`
+	ID     int32           `json:"id,omitempty"`
 	Error  string          `json:"error"`
-	Method string          `json:"method"`
-	Body   json.RawMessage `json:"body"`
+	Result json.RawMessage `json:"result"`
 }
 
 type joinLeaveMessage struct {

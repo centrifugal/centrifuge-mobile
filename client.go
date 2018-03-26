@@ -12,76 +12,74 @@ import (
 	"github.com/jpillora/backoff"
 )
 
-// Timestamp is helper function to get current timestamp as
-// string - i.e. in a format Centrifugo expects. Actually in
-// most cases you need an analogue of this function on your
-// app backend when generating client connection token.
-func Timestamp() string {
-	return strconv.FormatInt(time.Now().Unix(), 10)
+// Exp is helper function to get sign exp timestamp as
+// string - i.e. in a format Centrifuge server expects.
+// Actually in most cases you need an analogue of this
+// function on your app backend when generating client
+// connection credentials.
+func Exp(ttlSeconds int) string {
+	return strconv.FormatInt(time.Now().Unix()+int64(ttlSeconds), 10)
 }
 
 // Credentials describe client connection parameters.
 type Credentials struct {
-	User      string
-	Timestamp string
-	Info      string
-	Token     string
+	User string
+	Exp  string
+	Info string
+	Sign string
 }
 
 // NewCredentials initializes Credentials.
-func NewCredentials(user, timestamp, info, token string) *Credentials {
+func NewCredentials(user, exp, info, sign string) *Credentials {
 	return &Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
+		User: user,
+		Exp:  exp,
+		Info: info,
+		Sign: sign,
 	}
 }
 
 var (
-	ErrTimeout              = errors.New("timed out")
-	ErrInvalidMessage       = errors.New("invalid message")
-	ErrDuplicateWaiter      = errors.New("waiter with specified uid already exists")
-	ErrWaiterClosed         = errors.New("waiter closed")
-	ErrClientStatus         = errors.New("wrong client status to make operation")
-	ErrClientDisconnected   = errors.New("client disconnected")
-	ErrClientExpired        = errors.New("client expired")
-	ErrReconnectFailed      = errors.New("reconnect failed")
-	ErrBadSubscribeStatus   = errors.New("bad subscribe status")
-	ErrBadUnsubscribeStatus = errors.New("bad unsubscribe status")
-	ErrBadPublishStatus     = errors.New("bad publish status")
+	ErrTimeout            = errors.New("timed out")
+	ErrInvalidMessage     = errors.New("invalid message")
+	ErrDuplicateWaiter    = errors.New("waiter with specified uid already exists")
+	ErrWaiterClosed       = errors.New("waiter closed")
+	ErrClientClosed       = errors.New("client closed")
+	ErrClientDisconnected = errors.New("client disconnected")
+	ErrClientExpired      = errors.New("client connection expired")
+	ErrReconnectFailed    = errors.New("reconnect failed")
 )
 
 const (
-	DefaultPrivateChannelPrefix = "$"
-	DefaultTimeoutMilliseconds  = 5000
-	DefaultPingMilliseconds     = 25000
-	DefaultPongMilliseconds     = 10000
+	DefaultPrivateChannelPrefix     = "$"
+	DefaultTimeoutMilliseconds      = 5000
+	DefaultPingIntervalMilliseconds = 25000
+	DefaultPongWaitMilliseconds     = 10000
 )
 
 // Config contains various client options.
 type Config struct {
-	TimeoutMilliseconds  int
-	PrivateChannelPrefix string
-	WebsocketCompression bool
-	Ping                 bool
-	PingMilliseconds     int
-	PongMilliseconds     int
+	TimeoutMilliseconds      int
+	PrivateChannelPrefix     string
+	WebsocketCompression     bool
+	Ping                     bool
+	PingIntervalMilliseconds int
+	PongWaitMilliseconds     int
 }
 
 // DefaultConfig returns Config with default options.
 func DefaultConfig() *Config {
 	return &Config{
-		Ping:                 true,
-		PingMilliseconds:     DefaultPingMilliseconds,
-		PongMilliseconds:     DefaultPongMilliseconds,
-		PrivateChannelPrefix: DefaultPrivateChannelPrefix,
-		TimeoutMilliseconds:  DefaultTimeoutMilliseconds,
-		WebsocketCompression: false,
+		Ping: true,
+		PingIntervalMilliseconds: DefaultPingIntervalMilliseconds,
+		PongWaitMilliseconds:     DefaultPongWaitMilliseconds,
+		PrivateChannelPrefix:     DefaultPrivateChannelPrefix,
+		TimeoutMilliseconds:      DefaultTimeoutMilliseconds,
+		WebsocketCompression:     false,
 	}
 }
 
-// Private sign confirmes that client can subscribe on private channel.
+// PrivateSign confirmes that client can subscribe on private channel.
 type PrivateSign struct {
 	Sign string
 	Info string
@@ -201,7 +199,7 @@ type Client struct {
 	subsMutex         sync.RWMutex
 	subs              map[string]*Sub
 	waitersMutex      sync.RWMutex
-	waiters           map[string]chan response
+	waiters           map[int32]chan response
 	receive           chan []byte
 	write             chan []byte
 	closed            chan struct{}
@@ -216,15 +214,14 @@ func (c *Client) nextMsgID() int32 {
 	return atomic.AddInt32(&c.msgID, 1)
 }
 
-// New initializes Client struct. It accepts URL to Centrifugo server,
-// connection Credentials, EventHandler and Config.
-func New(u string, creds *Credentials, events *EventHandler, config *Config) *Client {
+// New initializes Client struct. It accepts URL to Centrifuge server,
+// EventHandler and Config.
+func New(u string, events *EventHandler, config *Config) *Client {
 	c := &Client{
 		url:               u,
 		subs:              make(map[string]*Sub),
 		config:            config,
-		credentials:       creds,
-		waiters:           make(map[string]chan response),
+		waiters:           make(map[int32]chan response),
 		reconnect:         true,
 		reconnectStrategy: defaultBackoffReconnect,
 		createConn:        newWSConnection,
@@ -232,6 +229,12 @@ func New(u string, creds *Credentials, events *EventHandler, config *Config) *Cl
 		delayPing:         make(chan struct{}, 32),
 	}
 	return c
+}
+
+// SetCredentials allow to set credentials to client to let it
+// authenticate itself.
+func (c *Client) SetCredentials(creds *Credentials) {
+	c.credentials = creds
 }
 
 func (c *Client) subscribed(channel string) bool {
@@ -445,7 +448,7 @@ func (c *Client) doReconnect() error {
 }
 
 func (c *Client) pinger(closeCh chan struct{}) {
-	timeout := time.Duration(c.config.PingMilliseconds) * time.Millisecond
+	timeout := time.Duration(c.config.PingIntervalMilliseconds) * time.Millisecond
 	for {
 		select {
 		case <-c.delayPing:
@@ -511,9 +514,9 @@ func (c *Client) handle(msg []byte) error {
 		return err
 	}
 	for _, resp := range resps {
-		if resp.UID != "" {
+		if resp.ID > 0 {
 			c.waitersMutex.RLock()
-			if waiter, ok := c.waiters[resp.UID]; ok {
+			if waiter, ok := c.waiters[resp.ID]; ok {
 				waiter <- resp
 			}
 			c.waitersMutex.RUnlock()
@@ -589,7 +592,7 @@ func (c *Client) Connect() error {
 	}
 	if c.status == CLOSED {
 		c.mutex.Unlock()
-		return ErrClientStatus
+		return ErrClientClosed
 	}
 	c.status = CONNECTING
 	c.reconnect = true
@@ -761,21 +764,21 @@ func (c *Client) sendRefresh() error {
 
 	cmd := refreshClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "refresh",
 		},
 		Params: refreshParams{
-			User:      c.credentials.User,
-			Timestamp: c.credentials.Timestamp,
-			Info:      c.credentials.Info,
-			Token:     c.credentials.Token,
+			User: c.credentials.User,
+			Exp:  c.credentials.Exp,
+			Info: c.credentials.Info,
+			Sign: c.credentials.Sign,
 		},
 	}
 	cmdBytes, err := json.Marshal(cmd)
 	if err != nil {
 		return err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return err
 	}
@@ -807,21 +810,23 @@ func (c *Client) sendRefresh() error {
 func (c *Client) sendConnect() (connectResponseBody, error) {
 	cmd := connectClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "connect",
 		},
-		Params: connectParams{
-			User:      c.credentials.User,
-			Timestamp: c.credentials.Timestamp,
-			Info:      c.credentials.Info,
-			Token:     c.credentials.Token,
-		},
+	}
+	if c.credentials != nil {
+		cmd.Params = connectParams{
+			User: c.credentials.User,
+			Exp:  c.credentials.Exp,
+			Info: c.credentials.Info,
+			Sign: c.credentials.Sign,
+		}
 	}
 	cmdBytes, err := json.Marshal(cmd)
 	if err != nil {
 		return connectResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return connectResponseBody{}, err
 	}
@@ -914,12 +919,6 @@ func (c *Client) subscribe(sub *Sub) error {
 		c.subsMutex.Unlock()
 		return err
 	}
-	if !body.Status {
-		c.subsMutex.Lock()
-		delete(c.subs, channel)
-		c.subsMutex.Unlock()
-		return ErrBadSubscribeStatus
-	}
 
 	if len(body.Messages) > 0 {
 		for i := len(body.Messages) - 1; i >= 0; i-- {
@@ -951,7 +950,7 @@ func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSig
 
 	cmd := subscribeClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "subscribe",
 		},
 		Params: params,
@@ -960,7 +959,7 @@ func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSig
 	if err != nil {
 		return subscribeResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return subscribeResponseBody{}, err
 	}
@@ -976,12 +975,9 @@ func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSig
 }
 
 func (c *Client) publish(channel string, data []byte) error {
-	body, err := c.sendPublish(channel, data)
+	_, err := c.sendPublish(channel, data)
 	if err != nil {
 		return err
-	}
-	if !body.Status {
-		return ErrBadPublishStatus
 	}
 	return nil
 }
@@ -994,7 +990,7 @@ func (c *Client) sendPublish(channel string, data []byte) (publishResponseBody, 
 	}
 	cmd := publishClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "publish",
 		},
 		Params: params,
@@ -1003,7 +999,7 @@ func (c *Client) sendPublish(channel string, data []byte) (publishResponseBody, 
 	if err != nil {
 		return publishResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return publishResponseBody{}, err
 	}
@@ -1033,7 +1029,7 @@ func (c *Client) history(channel string) ([]Message, error) {
 func (c *Client) sendHistory(channel string) (historyResponseBody, error) {
 	cmd := historyClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "history",
 		},
 		Params: historyParams{
@@ -1044,7 +1040,7 @@ func (c *Client) sendHistory(channel string) (historyResponseBody, error) {
 	if err != nil {
 		return historyResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return historyResponseBody{}, err
 	}
@@ -1074,7 +1070,7 @@ func (c *Client) presence(channel string) (map[string]ClientInfo, error) {
 func (c *Client) sendPresence(channel string) (presenceResponseBody, error) {
 	cmd := presenceClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "presence",
 		},
 		Params: presenceParams{
@@ -1085,7 +1081,7 @@ func (c *Client) sendPresence(channel string) (presenceResponseBody, error) {
 	if err != nil {
 		return presenceResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return presenceResponseBody{}, err
 	}
@@ -1104,12 +1100,9 @@ func (c *Client) unsubscribe(channel string) error {
 	if !c.subscribed(channel) {
 		return nil
 	}
-	body, err := c.sendUnsubscribe(channel)
+	_, err := c.sendUnsubscribe(channel)
 	if err != nil {
 		return err
-	}
-	if !body.Status {
-		return ErrBadUnsubscribeStatus
 	}
 	return nil
 }
@@ -1117,7 +1110,7 @@ func (c *Client) unsubscribe(channel string) error {
 func (c *Client) sendUnsubscribe(channel string) (unsubscribeResponseBody, error) {
 	cmd := unsubscribeClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "unsubscribe",
 		},
 		Params: unsubscribeParams{
@@ -1128,7 +1121,7 @@ func (c *Client) sendUnsubscribe(channel string) (unsubscribeResponseBody, error
 	if err != nil {
 		return unsubscribeResponseBody{}, err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
 		return unsubscribeResponseBody{}, err
 	}
@@ -1146,7 +1139,7 @@ func (c *Client) sendUnsubscribe(channel string) (unsubscribeResponseBody, error
 func (c *Client) sendPing() error {
 	cmd := pingClientCommand{
 		clientCommand: clientCommand{
-			UID:    strconv.Itoa(int(c.nextMsgID())),
+			ID:     int32(c.nextMsgID()),
 			Method: "ping",
 		},
 	}
@@ -1154,7 +1147,7 @@ func (c *Client) sendPing() error {
 	if err != nil {
 		return err
 	}
-	r, err := c.sendSync(cmd.UID, cmdBytes, time.Duration(c.config.PongMilliseconds)*time.Millisecond)
+	r, err := c.sendSync(cmd.ID, cmdBytes, time.Duration(c.config.PongWaitMilliseconds)*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -1164,10 +1157,10 @@ func (c *Client) sendPing() error {
 	return nil
 }
 
-func (c *Client) sendSync(uid string, msg []byte, timeout time.Duration) (response, error) {
+func (c *Client) sendSync(id int32, msg []byte, timeout time.Duration) (response, error) {
 	wait := make(chan response)
-	err := c.addWaiter(uid, wait)
-	defer c.removeWaiter(uid)
+	err := c.addWaiter(id, wait)
+	defer c.removeWaiter(id)
 	if err != nil {
 		return response{}, err
 	}
@@ -1188,20 +1181,20 @@ func (c *Client) send(msg []byte) error {
 	return nil
 }
 
-func (c *Client) addWaiter(uid string, ch chan response) error {
+func (c *Client) addWaiter(id int32, ch chan response) error {
 	c.waitersMutex.Lock()
 	defer c.waitersMutex.Unlock()
-	if _, ok := c.waiters[uid]; ok {
+	if _, ok := c.waiters[id]; ok {
 		return ErrDuplicateWaiter
 	}
-	c.waiters[uid] = ch
+	c.waiters[id] = ch
 	return nil
 }
 
-func (c *Client) removeWaiter(uid string) error {
+func (c *Client) removeWaiter(id int32) error {
 	c.waitersMutex.Lock()
 	defer c.waitersMutex.Unlock()
-	delete(c.waiters, uid)
+	delete(c.waiters, id)
 	return nil
 }
 

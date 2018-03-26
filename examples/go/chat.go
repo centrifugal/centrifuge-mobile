@@ -12,7 +12,6 @@ import (
 	"os"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
 // ChatMessage is chat app specific message struct.
@@ -24,21 +23,21 @@ type ChatMessage struct {
 // In production you need to receive credentials from application backend.
 func credentials() *centrifuge.Credentials {
 	// Never show secret to client of your application. Keep it on your application backend only.
-	secret := "secret"
+	// secret := "secret"
 	// Application user ID - anonymous in this case.
 	user := ""
-	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
+	// Exp timestamp as string.
+	exp := centrifuge.Exp(60)
 	// Empty info.
 	info := ""
-	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+	// Generate client sign so Centrifuge server can trust connection parameters received from client.
+	sign := ""
 
 	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
+		User: user,
+		Exp:  exp,
+		Info: info,
+		Sign: sign,
 	}
 }
 
@@ -83,15 +82,15 @@ func (h *eventHandler) OnUnsubscribe(sub *centrifuge.Sub, ctx *centrifuge.Unsubs
 }
 
 func main() {
-	creds := credentials()
-	wsURL := "wss://centrifugo.herokuapp.com/connection/websocket"
+	//creds := credentials()
+	wsURL := "ws://localhost:8000/connection/websocket"
 
 	handler := &eventHandler{os.Stdout}
 
 	events := centrifuge.NewEventHandler()
 	events.OnConnect(handler)
 	events.OnDisconnect(handler)
-	c := centrifuge.New(wsURL, creds, events, centrifuge.DefaultConfig())
+	c := centrifuge.New(wsURL, events, centrifuge.DefaultConfig())
 
 	subEvents := centrifuge.NewSubEventHandler()
 	subEvents.OnMessage(handler)
@@ -104,7 +103,7 @@ func main() {
 	fmt.Fprintf(os.Stdout, "Connect to %s\n", wsURL)
 	fmt.Fprintf(os.Stdout, "Print something and press ENTER to send\n")
 
-	sub, err := c.Subscribe("jsfiddle-chat", subEvents)
+	sub, err := c.Subscribe("chat:index", subEvents)
 	if err != nil {
 		log.Fatalln(err)
 	}
