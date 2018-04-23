@@ -6,40 +6,38 @@ package main
 import (
 	"encoding/json"
 	"log"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
-// In production you need to receive credentials from application backend.
-func credentials(n int) *centrifuge.Credentials {
-	// Never show secret to client of your application. Keep it on your application backend only.
-	secret := "secret"
-	// Application user ID.
-	user := strconv.Itoa(n)
-	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
-	// Empty info.
-	info := ""
-	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+// // In production you need to receive credentials from application backend.
+// func credentials(n int) *centrifuge.Credentials {
+// 	// Never show secret to client of your application. Keep it on your application backend only.
+// 	secret := "secret"
+// 	// Application user ID.
+// 	user := strconv.Itoa(n)
+// 	// Current timestamp as string.
+// 	timestamp := centrifuge.Timestamp()
+// 	// Empty info.
+// 	info := ""
+// 	// Generate client token so Centrifugo server can trust connection parameters received from client.
+// 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
-	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
-	}
-}
+// 	return &centrifuge.Credentials{
+// 		User:      user,
+// 		Timestamp: timestamp,
+// 		Info:      info,
+// 		Token:     token,
+// 	}
+// }
 
 func newConnection(n int) *centrifuge.Client {
-	creds := credentials(n)
-	wsURL := "ws://localhost:8000/connection/websocket"
-	c := centrifuge.New(wsURL, creds, nil, centrifuge.DefaultConfig())
+	//creds := credentials(n)
+	wsURL := "ws://localhost:8000/connection/websocket?format=protobuf"
+	c := centrifuge.New(wsURL, nil, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
@@ -58,7 +56,7 @@ type subEventHandler struct {
 	throughput *throughput
 }
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
+func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, pub centrifuge.Pub) {
 	val := atomic.AddInt32(&h.throughput.msgReceived, 1)
 	if val == int32(h.throughput.totalMsg) {
 		close(h.throughput.done)
@@ -68,8 +66,8 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message
 func main() {
 	var wg sync.WaitGroup
 	done := make(chan struct{})
-	numSubscribers := 100
-	numPublish := 500
+	numSubscribers := 1000
+	numPublish := 1000
 
 	wg.Add(numSubscribers)
 
@@ -78,13 +76,15 @@ func main() {
 		totalMsg: numPublish * numSubscribers,
 	}
 
+	channel := "benchmark:throughput"
+
 	for i := 0; i < numSubscribers; i++ {
-		time.Sleep(time.Millisecond * 10)
+		time.Sleep(time.Millisecond)
 		go func(n int) {
 			c := newConnection(n)
 			events := centrifuge.NewSubEventHandler()
 			events.OnMessage(&subEventHandler{t})
-			c.Subscribe("test", events)
+			c.SubscribeSync(channel, events)
 			wg.Done()
 			<-done
 		}(i)
@@ -93,20 +93,22 @@ func main() {
 	wg.Wait()
 
 	c := newConnection(numSubscribers + 1)
-	sub, err := c.Subscribe("test", nil)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	sub, _ := c.SubscribeSync(channel, nil)
 
 	data := map[string]string{"input": "1"}
 	dataBytes, _ := json.Marshal(data)
 
+	semaphore := make(chan struct{}, 16)
 	started := time.Now()
 	for i := 0; i < numPublish; i++ {
-		err := sub.Publish(dataBytes)
-		if err != nil {
-			panic(err)
-		}
+		go func() {
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			err := sub.Publish(dataBytes)
+			if err != nil {
+				panic(err)
+			}
+		}()
 	}
 	<-done
 	elapsed := time.Since(started)

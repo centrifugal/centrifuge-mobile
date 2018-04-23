@@ -9,56 +9,55 @@ import (
 	"time"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
-type TestMessage struct {
+type testMessage struct {
 	Input string `json:"input"`
 }
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
+func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg centrifuge.Pub) {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
 }
 
-func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) {
+func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg centrifuge.ClientInfo) {
 	log.Println(fmt.Sprintf("User %s (client ID %s) joined channel %s", msg.User, msg.Client, sub.Channel()))
 }
 
-func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) {
+func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg centrifuge.ClientInfo) {
 	log.Println(fmt.Sprintf("User %s (client ID %s) left channel %s", msg.User, msg.Client, sub.Channel()))
 }
 
-// In production you need to receive credentials from application backend.
-func credentials() *centrifuge.Credentials {
-	// Never show secret to client of your application. Keep it on your application backend only.
-	secret := "secret"
-	// Application user ID.
-	user := "42"
-	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
-	// Empty info.
-	info := ""
-	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+// // In production you need to receive credentials from application backend.
+// func credentials() *centrifuge.Credentials {
+// 	// Never show secret to client of your application. Keep it on your application backend only.
+// 	secret := "secret"
+// 	// Application user ID.
+// 	user := "42"
+// 	// Current timestamp as string.
+// 	timestamp := centrifuge.Timestamp()
+// 	// Empty info.
+// 	info := ""
+// 	// Generate client token so Centrifugo server can trust connection parameters received from client.
+// 	token := auth.GenerateClientToken(secret, user, timestamp, info)
 
-	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
-	}
-}
+// 	return &centrifuge.Credentials{
+// 		User:      user,
+// 		Timestamp: timestamp,
+// 		Info:      info,
+// 		Token:     token,
+// 	}
+// }
 
 func main() {
 	// In production you need to receive credentials from application backend.
-	creds := credentials()
+	//creds := credentials()
 
 	started := time.Now()
 
 	wsURL := "ws://localhost:8000/connection/websocket"
-	c := centrifuge.New(wsURL, creds, nil, centrifuge.DefaultConfig())
+	c := centrifuge.New(wsURL, nil, centrifuge.DefaultConfig())
 	defer c.Close()
 
 	err := c.Connect()
@@ -72,12 +71,9 @@ func main() {
 	events.OnJoin(subEventHandler)
 	events.OnLeave(subEventHandler)
 
-	sub, err := c.Subscribe("public:chat", events)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	sub := c.Subscribe("chat:index", events)
 
-	data := TestMessage{Input: "example input"}
+	data := testMessage{Input: "example input"}
 	dataBytes, _ := json.Marshal(data)
 	err = sub.Publish(dataBytes)
 	if err != nil {

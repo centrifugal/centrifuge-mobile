@@ -3,6 +3,8 @@ package centrifuge
 import (
 	"sync"
 	"time"
+
+	"github.com/centrifugal/centrifuge-mobile/proto"
 )
 
 // SubscribeSuccessContext is a subscribe success event context passed to event callback.
@@ -21,32 +23,32 @@ type UnsubscribeContext struct{}
 
 // MessageHandler is a function to handle messages in channels.
 type MessageHandler interface {
-	OnMessage(*Sub, *Message)
+	OnMessage(*Sub, proto.Pub)
 }
 
 // JoinHandler is a function to handle join messages.
 type JoinHandler interface {
-	OnJoin(*Sub, *ClientInfo)
+	OnJoin(*Sub, proto.ClientInfo)
 }
 
 // LeaveHandler is a function to handle leave messages.
 type LeaveHandler interface {
-	OnLeave(*Sub, *ClientInfo)
+	OnLeave(*Sub, proto.ClientInfo)
 }
 
 // UnsubscribeHandler is a function to handle unsubscribe event.
 type UnsubscribeHandler interface {
-	OnUnsubscribe(*Sub, *UnsubscribeContext)
+	OnUnsubscribe(*Sub, UnsubscribeContext)
 }
 
 // SubscribeSuccessHandler is a function to handle subscribe success event.
 type SubscribeSuccessHandler interface {
-	OnSubscribeSuccess(*Sub, *SubscribeSuccessContext)
+	OnSubscribeSuccess(*Sub, SubscribeSuccessContext)
 }
 
 // SubscribeErrorHandler is a function to handle subscribe error event.
 type SubscribeErrorHandler interface {
-	OnSubscribeError(*Sub, *SubscribeErrorContext)
+	OnSubscribeError(*Sub, SubscribeErrorContext)
 }
 
 // SubEventHandler contains callback functions that will be called when
@@ -186,7 +188,7 @@ func (s *Sub) Publish(data []byte) error {
 	}
 }
 
-func (s *Sub) history() ([]Message, error) {
+func (s *Sub) history() ([]proto.Pub, error) {
 	subFuture := s.newSubFuture()
 	select {
 	case err := <-subFuture:
@@ -200,7 +202,7 @@ func (s *Sub) history() ([]Message, error) {
 	}
 }
 
-func (s *Sub) presence() (map[string]ClientInfo, error) {
+func (s *Sub) presence() (map[string]proto.ClientInfo, error) {
 	subFuture := s.newSubFuture()
 	select {
 	case err := <-subFuture:
@@ -240,7 +242,7 @@ func (s *Sub) triggerOnUnsubscribe(needResubscribe bool) {
 	s.mu.Unlock()
 	if s.events != nil && s.events.onUnsubscribe != nil {
 		handler := s.events.onUnsubscribe
-		handler.OnUnsubscribe(s, &UnsubscribeContext{})
+		handler.OnUnsubscribe(s, UnsubscribeContext{})
 	}
 }
 
@@ -256,7 +258,7 @@ func (s *Sub) subscribeSuccess(recovered bool) {
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeSuccess != nil {
 		handler := s.events.onSubscribeSuccess
-		handler.OnSubscribeSuccess(s, &SubscribeSuccessContext{Resubscribed: resubscribed, Recovered: recovered})
+		handler.OnSubscribeSuccess(s, SubscribeSuccessContext{Resubscribed: resubscribed, Recovered: recovered})
 	}
 	s.mu.Lock()
 	s.resubscribed = true
@@ -275,11 +277,11 @@ func (s *Sub) subscribeError(err error) {
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeError != nil {
 		handler := s.events.onSubscribeError
-		handler.OnSubscribeError(s, &SubscribeErrorContext{Error: err.Error()})
+		handler.OnSubscribeError(s, SubscribeErrorContext{Error: err.Error()})
 	}
 }
 
-func (s *Sub) handleMessage(m *Message) {
+func (s *Sub) handlePub(m proto.Pub) {
 	var handler MessageHandler
 	if s.events != nil && s.events.onMessage != nil {
 		handler = s.events.onMessage
@@ -293,7 +295,7 @@ func (s *Sub) handleMessage(m *Message) {
 	}
 }
 
-func (s *Sub) handleJoinMessage(info *ClientInfo) {
+func (s *Sub) handleJoin(info proto.ClientInfo) {
 	var handler JoinHandler
 	if s.events != nil && s.events.onJoin != nil {
 		handler = s.events.onJoin
@@ -303,7 +305,7 @@ func (s *Sub) handleJoinMessage(info *ClientInfo) {
 	}
 }
 
-func (s *Sub) handleLeaveMessage(info *ClientInfo) {
+func (s *Sub) handleLeave(info proto.ClientInfo) {
 	var handler LeaveHandler
 	if s.events != nil && s.events.onLeave != nil {
 		handler = s.events.onLeave
@@ -311,6 +313,10 @@ func (s *Sub) handleLeaveMessage(info *ClientInfo) {
 	if handler != nil {
 		handler.OnLeave(s, info)
 	}
+}
+
+func (s *Sub) handleUnsub(m proto.Unsub) {
+	s.Unsubscribe()
 }
 
 func (s *Sub) resubscribe() error {
@@ -348,24 +354,24 @@ func (s *Sub) resubscribe() error {
 		msgID = &msg
 	}
 	s.lastMessageMu.Unlock()
-	body, err := s.centrifuge.sendSubscribe(s.channel, msgID, privateSign)
+	res, err := s.centrifuge.sendSubscribe(s.channel, msgID, privateSign)
 	if err != nil {
 		s.subscribeError(err)
 		return err
 	}
 
-	if len(body.Messages) > 0 {
-		for i := len(body.Messages) - 1; i >= 0; i-- {
-			s.handleMessage(messageFromRaw(&body.Messages[i]))
+	if len(res.Pubs) > 0 {
+		for i := len(res.Pubs) - 1; i >= 0; i-- {
+			s.handlePub(*res.Pubs[i])
 		}
 	} else {
-		lastID := string(body.Last)
+		lastID := string(res.Last)
 		s.lastMessageMu.Lock()
 		s.lastMessageID = &lastID
 		s.lastMessageMu.Unlock()
 	}
 
-	s.subscribeSuccess(body.Recovered)
+	s.subscribeSuccess(res.Recovered)
 
 	return nil
 }

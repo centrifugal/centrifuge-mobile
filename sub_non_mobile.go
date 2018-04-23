@@ -2,12 +2,14 @@
 
 package centrifuge
 
+import "github.com/centrifugal/centrifuge-mobile/proto"
+
 // History allows to extract channel history.
-func (s *Sub) History() ([]Message, error) {
+func (s *Sub) History() ([]proto.Pub, error) {
 	return s.history()
 }
 
 // Presence allows to extract channel history.
-func (s *Sub) Presence() (map[string]ClientInfo, error) {
+func (s *Sub) Presence() (map[string]proto.ClientInfo, error) {
 	return s.presence()
 }

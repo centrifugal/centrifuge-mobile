@@ -3,12 +3,14 @@ package centrifuge
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/centrifugal/centrifuge-mobile/proto"
 	"github.com/jpillora/backoff"
 )
 
@@ -39,10 +41,14 @@ func NewCredentials(user, exp, info, sign string) *Credentials {
 	}
 }
 
+type disconnect struct {
+	Reason    string
+	Reconnect bool
+}
+
 var (
-	ErrTimeout            = errors.New("timed out")
-	ErrInvalidMessage     = errors.New("invalid message")
-	ErrDuplicateWaiter    = errors.New("waiter with specified uid already exists")
+	// ErrTimeout ...
+	ErrTimeout            = errors.New("timeout")
 	ErrWaiterClosed       = errors.New("waiter closed")
 	ErrClientClosed       = errors.New("client closed")
 	ErrClientDisconnected = errors.New("client disconnected")
@@ -50,7 +56,7 @@ var (
 	ErrReconnectFailed    = errors.New("reconnect failed")
 )
 
-const (
+var (
 	DefaultPrivateChannelPrefix     = "$"
 	DefaultTimeoutMilliseconds      = 5000
 	DefaultPingIntervalMilliseconds = 25000
@@ -62,7 +68,6 @@ type Config struct {
 	TimeoutMilliseconds      int
 	PrivateChannelPrefix     string
 	WebsocketCompression     bool
-	Ping                     bool
 	PingIntervalMilliseconds int
 	PongWaitMilliseconds     int
 }
@@ -70,7 +75,6 @@ type Config struct {
 // DefaultConfig returns Config with default options.
 func DefaultConfig() *Config {
 	return &Config{
-		Ping: true,
 		PingIntervalMilliseconds: DefaultPingIntervalMilliseconds,
 		PongWaitMilliseconds:     DefaultPongWaitMilliseconds,
 		PrivateChannelPrefix:     DefaultPrivateChannelPrefix,
@@ -190,6 +194,7 @@ const (
 type Client struct {
 	mutex             sync.RWMutex
 	url               string
+	encoding          proto.Encoding
 	config            *Config
 	credentials       *Credentials
 	conn              connection
@@ -199,7 +204,7 @@ type Client struct {
 	subsMutex         sync.RWMutex
 	subs              map[string]*Sub
 	waitersMutex      sync.RWMutex
-	waiters           map[int32]chan response
+	waiters           map[uint32]chan proto.Reply
 	receive           chan []byte
 	write             chan []byte
 	closed            chan struct{}
@@ -208,6 +213,11 @@ type Client struct {
 	createConn        connFactory
 	events            *EventHandler
 	delayPing         chan struct{}
+	paramsEncoder     proto.ParamsEncoder
+	resultDecoder     proto.ResultDecoder
+	commandEncoder    proto.CommandEncoder
+	messageEncoder    proto.MessageEncoder
+	messageDecoder    proto.MessageDecoder
 }
 
 func (c *Client) nextMsgID() int32 {
@@ -217,23 +227,37 @@ func (c *Client) nextMsgID() int32 {
 // New initializes Client struct. It accepts URL to Centrifuge server,
 // EventHandler and Config.
 func New(u string, events *EventHandler, config *Config) *Client {
+	var encoding proto.Encoding
+	if strings.Contains(strings.ToLower(u), "format=protobuf") {
+		encoding = proto.EncodingProtobuf
+	} else {
+		encoding = proto.EncodingJSON
+	}
 	c := &Client{
 		url:               u,
+		encoding:          encoding,
 		subs:              make(map[string]*Sub),
 		config:            config,
-		waiters:           make(map[int32]chan response),
+		waiters:           make(map[uint32]chan proto.Reply),
 		reconnect:         true,
 		reconnectStrategy: defaultBackoffReconnect,
 		createConn:        newWSConnection,
 		events:            events,
 		delayPing:         make(chan struct{}, 32),
+		paramsEncoder:     proto.GetParamsEncoder(encoding),
+		resultDecoder:     proto.GetResultDecoder(encoding),
+		commandEncoder:    proto.GetCommandEncoder(encoding),
+		messageEncoder:    proto.GetMessageEncoder(encoding),
+		messageDecoder:    proto.GetMessageDecoder(encoding),
 	}
 	return c
 }
 
-// SetCredentials allow to set credentials to client to let it
-// authenticate itself.
+// SetCredentials allows to set credentials to let client
+// authenticate itself on connect.
 func (c *Client) SetCredentials(creds *Credentials) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	c.credentials = creds
 }
 
@@ -263,21 +287,22 @@ func (c *Client) handleError(err error) {
 }
 
 // Close closes Client connection and cleans ups everything.
+// TODO: check unsubscribe and disconnect called.
 func (c *Client) Close() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	if c.status == CONNECTED {
-		c.subsMutex.RLock()
-		unsubs := make(map[string]*Sub, len(c.subs))
-		for ch, sub := range c.subs {
-			unsubs[ch] = sub
-		}
-		c.subsMutex.RUnlock()
-		for ch, sub := range unsubs {
-			c.unsubscribe(sub.Channel())
-			delete(c.subs, ch)
-		}
-	}
+	// if c.status == CONNECTED {
+	// 	c.subsMutex.RLock()
+	// 	unsubs := make(map[string]*Sub, len(c.subs))
+	// 	for ch, sub := range c.subs {
+	// 		unsubs[ch] = sub
+	// 	}
+	// 	c.subsMutex.RUnlock()
+	// 	for ch, sub := range unsubs {
+	// 		c.unsubscribe(sub.Channel())
+	// 		delete(c.subs, ch)
+	// 	}
+	// }
 	c.close()
 	c.status = CLOSED
 }
@@ -298,28 +323,28 @@ func (c *Client) close() {
 	}
 }
 
-func extractAdvice(err error) *disconnectAdvice {
-	adv := &disconnectAdvice{
+func extractDisconnect(err error) *disconnect {
+	d := &disconnect{
 		Reason:    "connection closed",
 		Reconnect: true,
 	}
 	if err != nil {
 		ok, _, reason := closeErr(err)
 		if ok {
-			var closeAdvice disconnectAdvice
-			err := json.Unmarshal([]byte(reason), &closeAdvice)
+			var disconnectAdvice disconnect
+			err := json.Unmarshal([]byte(reason), &disconnectAdvice)
 			if err == nil {
-				adv.Reason = closeAdvice.Reason
-				adv.Reconnect = closeAdvice.Reconnect
+				d.Reason = disconnectAdvice.Reason
+				d.Reconnect = disconnectAdvice.Reconnect
 			}
 		}
 	}
-	return adv
+	return d
 }
 
-func (c *Client) handleDisconnect(adv *disconnectAdvice) {
+func (c *Client) handleDisconnect(d *disconnect) {
 	c.mutex.Lock()
-	c.reconnect = adv.Reconnect
+	c.reconnect = d.Reconnect
 
 	if c.status == DISCONNECTED || c.status == CLOSED {
 		if c.conn != nil {
@@ -364,7 +389,7 @@ func (c *Client) handleDisconnect(adv *disconnectAdvice) {
 	}
 
 	if handler != nil {
-		ctx := &DisconnectContext{Reason: adv.Reason, Reconnect: reconnect}
+		ctx := &DisconnectContext{Reason: d.Reason, Reconnect: reconnect}
 		handler.OnDisconnect(c, ctx)
 	}
 
@@ -455,8 +480,8 @@ func (c *Client) pinger(closeCh chan struct{}) {
 		case <-time.After(timeout):
 			err := c.sendPing()
 			if err != nil {
-				adv := extractAdvice(err)
-				c.handleDisconnect(adv)
+				disconnect := extractDisconnect(err)
+				c.handleDisconnect(disconnect)
 				return
 			}
 		case <-closeCh:
@@ -469,8 +494,8 @@ func (c *Client) reader(conn connection, closeCh chan struct{}) {
 	for {
 		message, err := conn.ReadMessage()
 		if err != nil {
-			adv := extractAdvice(err)
-			c.handleDisconnect(adv)
+			disconnect := extractDisconnect(err)
+			c.handleDisconnect(disconnect)
 			return
 		}
 		select {
@@ -495,8 +520,8 @@ func (c *Client) writer(conn connection, closeCh chan struct{}) {
 		case msg := <-c.write:
 			err := conn.WriteMessage(msg)
 			if err != nil {
-				adv := extractAdvice(err)
-				c.handleDisconnect(adv)
+				disconnect := extractDisconnect(err)
+				c.handleDisconnect(disconnect)
 				return
 			}
 		case <-closeCh:
@@ -505,78 +530,113 @@ func (c *Client) writer(conn connection, closeCh chan struct{}) {
 	}
 }
 
-func (c *Client) handle(msg []byte) error {
-	if len(msg) == 0 {
+func (c *Client) handle(data []byte) error {
+	if len(data) == 0 {
 		return nil
 	}
-	resps, err := responsesFromClientMsg(msg)
-	if err != nil {
-		return err
-	}
-	for _, resp := range resps {
-		if resp.ID > 0 {
+
+	decoder := proto.GetReplyDecoder(c.encoding, data)
+	defer proto.PutReplyDecoder(c.encoding, decoder)
+
+	for {
+		reply, err := decoder.Decode()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		if reply.ID > 0 {
 			c.waitersMutex.RLock()
-			if waiter, ok := c.waiters[resp.ID]; ok {
-				waiter <- resp
+			if waiter, ok := c.waiters[reply.ID]; ok {
+				waiter <- *reply
 			}
 			c.waitersMutex.RUnlock()
 		} else {
-			err := c.handleAsyncResponse(resp)
+			messageDecoder := proto.GetMessageDecoder(c.encoding)
+			message, err := messageDecoder.Decode(reply.Result)
+			if err != nil {
+				c.handleError(err)
+				continue
+			}
+			err = c.handleMessage(*message)
 			if err != nil {
 				c.handleError(err)
 			}
 		}
+
 	}
+
 	return nil
 }
 
-func (c *Client) handleAsyncResponse(resp response) error {
-	method := resp.Method
-	body := resp.Body
-	switch method {
-	case "message":
-		var m *rawMessage
-		err := json.Unmarshal(body, &m)
+func (c *Client) handlePush(msg proto.Push) error {
+	return nil
+}
+
+func (c *Client) handleMessage(msg proto.Message) error {
+	messageDecoder := proto.GetMessageDecoder(c.encoding)
+
+	switch msg.Type {
+	case proto.MessageTypePush:
+		m, err := messageDecoder.DecodePush(msg.Data)
 		if err != nil {
-			// Malformed message received.
-			return errors.New("malformed message received from server")
+			return err
 		}
-		channel := m.Channel
+		c.handlePush(*m)
+	case proto.MessageTypeUnsub:
+		m, err := messageDecoder.DecodeUnsub(msg.Data)
+		if err != nil {
+			return err
+		}
+		channel := msg.Channel
 		c.subsMutex.RLock()
 		sub, ok := c.subs[string(channel)]
 		c.subsMutex.RUnlock()
 		if !ok {
 			return nil
 		}
-		sub.handleMessage(messageFromRaw(m))
-	case "join":
-		var b joinLeaveMessage
-		err := json.Unmarshal(body, &b)
+		sub.handleUnsub(*m)
+	case proto.MessageTypePub:
+		m, err := messageDecoder.DecodePub(msg.Data)
 		if err != nil {
-			return nil
+			return err
 		}
-		channel := b.Channel
+		channel := msg.Channel
 		c.subsMutex.RLock()
 		sub, ok := c.subs[string(channel)]
 		c.subsMutex.RUnlock()
 		if !ok {
 			return nil
 		}
-		sub.handleJoinMessage(clientInfoFromRaw(&b.Data))
-	case "leave":
-		var b joinLeaveMessage
-		err := json.Unmarshal(body, &b)
+		sub.handlePub(*m)
+	case proto.MessageTypeJoin:
+		m, err := messageDecoder.DecodeJoin(msg.Data)
 		if err != nil {
 			return nil
 		}
-		channel := b.Channel
+		channel := msg.Channel
 		c.subsMutex.RLock()
 		sub, ok := c.subs[string(channel)]
 		c.subsMutex.RUnlock()
 		if !ok {
 			return nil
 		}
-		sub.handleLeaveMessage(clientInfoFromRaw(&b.Data))
+		sub.handleJoin(m.Info)
+	case proto.MessageTypeLeave:
+		m, err := messageDecoder.DecodeLeave(msg.Data)
+		if err != nil {
+			return nil
+		}
+		channel := msg.Channel
+		c.subsMutex.RLock()
+		sub, ok := c.subs[string(channel)]
+		c.subsMutex.RUnlock()
+		if !ok {
+			return nil
+		}
+		sub.handleLeave(m.Info)
 	default:
 		return nil
 	}
@@ -600,8 +660,8 @@ func (c *Client) Connect() error {
 
 	err := c.connect()
 	if err != nil {
-		adv := extractAdvice(err)
-		c.handleDisconnect(adv)
+		disconnect := extractDisconnect(err)
+		c.handleDisconnect(disconnect)
 		return nil
 	}
 	err = c.resubscribe()
@@ -609,8 +669,8 @@ func (c *Client) Connect() error {
 		// we need just to close the connection and outgoing requests here
 		// but preserve all subscriptions.
 		c.close()
-		adv := extractAdvice(err)
-		c.handleDisconnect(adv)
+		disconnect := extractDisconnect(err)
+		c.handleDisconnect(disconnect)
 		return nil
 	}
 
@@ -643,45 +703,44 @@ func (c *Client) connect() error {
 	c.closed = closeCh
 	c.write = make(chan []byte, 64)
 	c.receive = make(chan []byte, 64)
-
 	c.mutex.Unlock()
 
 	go c.reader(conn, closeCh)
 	go c.writer(conn, closeCh)
 
-	var body connectResponseBody
+	var res proto.ConnectResult
 
-	body, err = c.sendConnect()
+	res, err = c.sendConnect()
 	if err != nil {
 		return err
 	}
 
-	if body.Expires && body.Expired {
+	if res.Expires && res.Expired {
 		// Try to refresh credentials and repeat connection attempt.
 		err = c.refreshCredentials()
 		if err != nil {
 			c.Close()
 			return err
 		}
-		body, err = c.sendConnect()
+		res, err = c.sendConnect()
 		if err != nil {
 			c.Close()
 			return err
 		}
-		if body.Expires && body.Expired {
+		if res.Expires && res.Expired {
 			c.Close()
 			return ErrClientExpired
 		}
 	}
 
 	c.mutex.Lock()
-	c.id = body.Client
+	c.id = res.Client
 	prevStatus := c.status
 	c.status = CONNECTED
 	c.mutex.Unlock()
 
-	if body.Expires {
-		go func(interval int64) {
+	if res.Expires {
+		go func(interval uint32) {
 			tick := time.After(time.Duration(interval) * time.Second)
 			select {
 			case <-c.closed:
@@ -689,12 +748,10 @@ func (c *Client) connect() error {
 			case <-tick:
 				c.sendRefresh()
 			}
-		}(body.TTL)
+		}(res.TTL)
 	}
 
-	if c.config.Ping {
-		go c.pinger(closeCh)
-	}
+	go c.pinger(closeCh)
 
 	if c.events != nil && c.events.onConnect != nil && prevStatus != CONNECTED {
 		handler := c.events.onConnect
@@ -721,7 +778,7 @@ func (c *Client) disconnect(reconnect bool) error {
 	c.mutex.Lock()
 	c.reconnect = reconnect
 	c.mutex.Unlock()
-	c.handleDisconnect(&disconnectAdvice{
+	c.handleDisconnect(&disconnect{
 		Reconnect: reconnect,
 		Reason:    "clean disconnect",
 	})
@@ -751,7 +808,9 @@ func (c *Client) refreshCredentials() error {
 	if err != nil {
 		return err
 	}
+	c.mutex.Lock()
 	c.credentials = creds
+	c.mutex.Unlock()
 	return nil
 }
 
@@ -762,19 +821,26 @@ func (c *Client) sendRefresh() error {
 		return err
 	}
 
-	cmd := refreshClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "refresh",
-		},
-		Params: refreshParams{
-			User: c.credentials.User,
-			Exp:  c.credentials.Exp,
-			Info: c.credentials.Info,
-			Sign: c.credentials.Sign,
-		},
+	c.mutex.RLock()
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypeRefresh,
 	}
-	cmdBytes, err := json.Marshal(cmd)
+	params := proto.RefreshRequest{
+		User: c.credentials.User,
+		Exp:  c.credentials.Exp,
+		Info: c.credentials.Info,
+		Sign: c.credentials.Sign,
+	}
+	paramsData, err := c.paramsEncoder.Encode(params)
+	if err != nil {
+		c.mutex.RUnlock()
+		return err
+	}
+	cmd.Params = paramsData
+	c.mutex.RUnlock()
+
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
 	if err != nil {
 		return err
 	}
@@ -782,19 +848,19 @@ func (c *Client) sendRefresh() error {
 	if err != nil {
 		return err
 	}
-	if r.Error != "" {
-		return errors.New(r.Error)
+	if r.Error != nil {
+		return r.Error
 	}
-	var body connectResponseBody
-	err = json.Unmarshal(r.Body, &body)
+	var res proto.RefreshResult
+	err = c.resultDecoder.Decode(r.Result, &res)
 	if err != nil {
 		return err
 	}
-	if body.Expires {
-		if body.Expired {
+	if res.Expires {
+		if res.Expired {
 			return ErrClientExpired
 		}
-		go func(interval int64) {
+		go func(interval uint32) {
 			tick := time.After(time.Duration(interval) * time.Second)
 			select {
 			case <-c.closed:
@@ -802,43 +868,51 @@ func (c *Client) sendRefresh() error {
 			case <-tick:
 				c.sendRefresh()
 			}
-		}(body.TTL)
+		}(res.TTL)
 	}
 	return nil
 }
 
-func (c *Client) sendConnect() (connectResponseBody, error) {
-	cmd := connectClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "connect",
-		},
+func (c *Client) sendConnect() (proto.ConnectResult, error) {
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypeConnect,
 	}
+
+	c.mutex.RLock()
 	if c.credentials != nil {
-		cmd.Params = connectParams{
+		params := proto.ConnectRequest{
 			User: c.credentials.User,
 			Exp:  c.credentials.Exp,
 			Info: c.credentials.Info,
 			Sign: c.credentials.Sign,
 		}
+		paramsData, err := c.paramsEncoder.Encode(params)
+		if err != nil {
+			return proto.ConnectResult{}, err
+		}
+		cmd.Params = paramsData
 	}
-	cmdBytes, err := json.Marshal(cmd)
+	c.mutex.RUnlock()
+
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
 	if err != nil {
-		return connectResponseBody{}, err
+		return proto.ConnectResult{}, err
 	}
 	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
-		return connectResponseBody{}, err
+		return proto.ConnectResult{}, err
 	}
-	if r.Error != "" {
-		return connectResponseBody{}, errors.New(r.Error)
+	if r.Error != nil {
+		return proto.ConnectResult{}, r.Error
 	}
-	var body connectResponseBody
-	err = json.Unmarshal(r.Body, &body)
+
+	var res proto.ConnectResult
+	err = c.resultDecoder.Decode(r.Result, &res)
 	if err != nil {
-		return connectResponseBody{}, err
+		return proto.ConnectResult{}, err
 	}
-	return body, nil
+	return res, nil
 }
 
 func (c *Client) privateSign(channel string) (*PrivateSign, error) {
@@ -859,8 +933,8 @@ func (c *Client) privateSign(channel string) (*PrivateSign, error) {
 	return ps, nil
 }
 
-// SubscribeAsync allows to subscribe on channel.
-func (c *Client) SubscribeAsync(channel string, events *SubEventHandler) *Sub {
+// Subscribe allows to subscribe on channel.
+func (c *Client) Subscribe(channel string, events *SubEventHandler) *Sub {
 	c.subsMutex.Lock()
 	var sub *Sub
 	if _, ok := c.subs[channel]; ok {
@@ -881,8 +955,8 @@ func (c *Client) SubscribeAsync(channel string, events *SubEventHandler) *Sub {
 	return sub
 }
 
-// Subscribe allows to subscribe on channel.
-func (c *Client) Subscribe(channel string, events *SubEventHandler) (*Sub, error) {
+// SubscribeSync allows to subscribe on channel and wait until subscribe success or error.
+func (c *Client) SubscribeSync(channel string, events *SubEventHandler) (*Sub, error) {
 	c.subsMutex.Lock()
 	var sub *Sub
 	if _, ok := c.subs[channel]; ok {
@@ -907,7 +981,7 @@ func (c *Client) subscribe(sub *Sub) error {
 		return err
 	}
 	sub.lastMessageMu.Lock()
-	body, err := c.sendSubscribe(channel, sub.lastMessageID, privateSign)
+	res, err := c.sendSubscribe(channel, sub.lastMessageID, privateSign)
 	sub.lastMessageMu.Unlock()
 
 	c.mutex.Lock()
@@ -920,12 +994,12 @@ func (c *Client) subscribe(sub *Sub) error {
 		return err
 	}
 
-	if len(body.Messages) > 0 {
-		for i := len(body.Messages) - 1; i >= 0; i-- {
-			sub.handleMessage(messageFromRaw(&body.Messages[i]))
+	if len(res.Pubs) > 0 {
+		for i := len(res.Pubs) - 1; i >= 0; i-- {
+			sub.handlePub(*res.Pubs[i])
 		}
 	} else {
-		lastID := string(body.Last)
+		lastID := string(res.Last)
 		sub.lastMessageMu.Lock()
 		sub.lastMessageID = &lastID
 		sub.lastMessageMu.Unlock()
@@ -933,11 +1007,11 @@ func (c *Client) subscribe(sub *Sub) error {
 	return nil
 }
 
-func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSign *PrivateSign) (subscribeResponseBody, error) {
-
-	params := subscribeParams{
+func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSign *PrivateSign) (proto.SubscribeResult, error) {
+	params := &proto.SubscribeRequest{
 		Channel: channel,
 	}
+
 	if lastMessageID != nil {
 		params.Recover = true
 		params.Last = *lastMessageID
@@ -948,30 +1022,34 @@ func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSig
 		params.Sign = privateSign.Sign
 	}
 
-	cmd := subscribeClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "subscribe",
-		},
-		Params: params,
-	}
-	cmdBytes, err := json.Marshal(cmd)
+	paramsData, err := c.paramsEncoder.Encode(params)
 	if err != nil {
-		return subscribeResponseBody{}, err
+		return proto.SubscribeResult{}, err
+	}
+
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypeSubscribe,
+		Params: paramsData,
+	}
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
+	if err != nil {
+		return proto.SubscribeResult{}, err
 	}
 	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
-		return subscribeResponseBody{}, err
+		return proto.SubscribeResult{}, err
 	}
-	if r.Error != "" {
-		return subscribeResponseBody{}, errors.New(r.Error)
+	if r.Error != nil {
+		return proto.SubscribeResult{}, r.Error
 	}
-	var body subscribeResponseBody
-	err = json.Unmarshal(r.Body, &body)
+
+	var res proto.SubscribeResult
+	err = c.resultDecoder.Decode(r.Result, &res)
 	if err != nil {
-		return subscribeResponseBody{}, err
+		return proto.SubscribeResult{}, err
 	}
-	return body, nil
+	return res, nil
 }
 
 func (c *Client) publish(channel string, data []byte) error {
@@ -982,118 +1060,127 @@ func (c *Client) publish(channel string, data []byte) error {
 	return nil
 }
 
-func (c *Client) sendPublish(channel string, data []byte) (publishResponseBody, error) {
-	raw := json.RawMessage(data)
-	params := publishParams{
+func (c *Client) sendPublish(channel string, data []byte) (proto.PublishResult, error) {
+	params := &proto.PublishRequest{
 		Channel: channel,
-		Data:    &raw,
+		Data:    proto.Raw(data),
 	}
-	cmd := publishClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "publish",
-		},
-		Params: params,
-	}
-	cmdBytes, err := json.Marshal(cmd)
+
+	paramsData, err := c.paramsEncoder.Encode(params)
 	if err != nil {
-		return publishResponseBody{}, err
+		return proto.PublishResult{}, err
+	}
+
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypePublish,
+		Params: paramsData,
+	}
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
+	if err != nil {
+		return proto.PublishResult{}, err
 	}
 	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
-		return publishResponseBody{}, err
+		return proto.PublishResult{}, err
 	}
-	if r.Error != "" {
-		return publishResponseBody{}, errors.New(r.Error)
+	if r.Error != nil {
+		return proto.PublishResult{}, r.Error
 	}
-	var body publishResponseBody
-	err = json.Unmarshal(r.Body, &body)
-	if err != nil {
-		return publishResponseBody{}, err
-	}
-	return body, nil
+	var res proto.PublishResult
+	return res, nil
 }
 
-func (c *Client) history(channel string) ([]Message, error) {
-	body, err := c.sendHistory(channel)
+func (c *Client) history(channel string) ([]proto.Pub, error) {
+	res, err := c.sendHistory(channel)
 	if err != nil {
-		return []Message{}, err
+		return []proto.Pub{}, err
 	}
-	messages := make([]Message, len(body.Data))
-	for i, m := range body.Data {
-		messages[i] = *messageFromRaw(&m)
+	pubs := make([]proto.Pub, len(res.Pubs))
+	for i, m := range res.Pubs {
+		pubs[i] = *m
 	}
-	return messages, nil
+	return pubs, nil
 }
 
-func (c *Client) sendHistory(channel string) (historyResponseBody, error) {
-	cmd := historyClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "history",
-		},
-		Params: historyParams{
-			Channel: channel,
-		},
+func (c *Client) sendHistory(channel string) (proto.HistoryResult, error) {
+	params := proto.HistoryRequest{
+		Channel: channel,
 	}
-	cmdBytes, err := json.Marshal(cmd)
+
+	paramsData, err := c.paramsEncoder.Encode(params)
 	if err != nil {
-		return historyResponseBody{}, err
+		return proto.HistoryResult{}, err
+	}
+
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypeHistory,
+		Params: paramsData,
+	}
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
+	if err != nil {
+		return proto.HistoryResult{}, err
 	}
 	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
-		return historyResponseBody{}, err
+		return proto.HistoryResult{}, err
 	}
-	if r.Error != "" {
-		return historyResponseBody{}, errors.New(r.Error)
+	if r.Error != nil {
+		return proto.HistoryResult{}, r.Error
 	}
-	var body historyResponseBody
-	err = json.Unmarshal(r.Body, &body)
+	var res proto.HistoryResult
+	err = c.resultDecoder.Decode(r.Result, &res)
 	if err != nil {
-		return historyResponseBody{}, err
+		return proto.HistoryResult{}, err
 	}
-	return body, nil
+	return res, nil
 }
 
-func (c *Client) presence(channel string) (map[string]ClientInfo, error) {
-	body, err := c.sendPresence(channel)
+func (c *Client) presence(channel string) (map[string]proto.ClientInfo, error) {
+	res, err := c.sendPresence(channel)
 	if err != nil {
-		return map[string]ClientInfo{}, err
+		return map[string]proto.ClientInfo{}, err
 	}
-	p := make(map[string]ClientInfo)
-	for uid, info := range body.Data {
-		p[uid] = *clientInfoFromRaw(&info)
+	p := make(map[string]proto.ClientInfo)
+	for uid, info := range res.Presence {
+		p[uid] = *info
 	}
 	return p, nil
 }
 
-func (c *Client) sendPresence(channel string) (presenceResponseBody, error) {
-	cmd := presenceClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "presence",
-		},
-		Params: presenceParams{
-			Channel: channel,
-		},
+func (c *Client) sendPresence(channel string) (proto.PresenceResult, error) {
+	params := proto.PresenceRequest{
+		Channel: channel,
 	}
-	cmdBytes, err := json.Marshal(cmd)
+
+	paramsData, err := c.paramsEncoder.Encode(params)
 	if err != nil {
-		return presenceResponseBody{}, err
+		return proto.PresenceResult{}, err
+	}
+
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypePresence,
+		Params: paramsData,
+	}
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
+	if err != nil {
+		return proto.PresenceResult{}, err
 	}
 	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
-		return presenceResponseBody{}, err
+		return proto.PresenceResult{}, err
 	}
-	if r.Error != "" {
-		return presenceResponseBody{}, errors.New(r.Error)
+	if r.Error != nil {
+		return proto.PresenceResult{}, r.Error
 	}
-	var body presenceResponseBody
-	err = json.Unmarshal(r.Body, &body)
+	var res proto.PresenceResult
+	err = c.resultDecoder.Decode(r.Result, &res)
 	if err != nil {
-		return presenceResponseBody{}, err
+		return proto.PresenceResult{}, err
 	}
-	return body, nil
+	return res, nil
 }
 
 func (c *Client) unsubscribe(channel string) error {
@@ -1107,43 +1194,46 @@ func (c *Client) unsubscribe(channel string) error {
 	return nil
 }
 
-func (c *Client) sendUnsubscribe(channel string) (unsubscribeResponseBody, error) {
-	cmd := unsubscribeClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "unsubscribe",
-		},
-		Params: unsubscribeParams{
-			Channel: channel,
-		},
+func (c *Client) sendUnsubscribe(channel string) (proto.UnsubscribeResult, error) {
+	params := proto.PresenceRequest{
+		Channel: channel,
 	}
-	cmdBytes, err := json.Marshal(cmd)
+
+	paramsData, err := c.paramsEncoder.Encode(params)
 	if err != nil {
-		return unsubscribeResponseBody{}, err
+		return proto.UnsubscribeResult{}, err
+	}
+
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypeUnsubscribe,
+		Params: paramsData,
+	}
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
+	if err != nil {
+		return proto.UnsubscribeResult{}, err
 	}
 	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
 	if err != nil {
-		return unsubscribeResponseBody{}, err
+		return proto.UnsubscribeResult{}, err
 	}
-	if r.Error != "" {
-		return unsubscribeResponseBody{}, errors.New(r.Error)
+	if r.Error != nil {
+		return proto.UnsubscribeResult{}, r.Error
 	}
-	var body unsubscribeResponseBody
-	err = json.Unmarshal(r.Body, &body)
+	var res proto.UnsubscribeResult
+	err = c.resultDecoder.Decode(r.Result, &res)
 	if err != nil {
-		return unsubscribeResponseBody{}, err
+		return proto.UnsubscribeResult{}, err
 	}
-	return body, nil
+	return res, nil
 }
 
 func (c *Client) sendPing() error {
-	cmd := pingClientCommand{
-		clientCommand: clientCommand{
-			ID:     int32(c.nextMsgID()),
-			Method: "ping",
-		},
+	cmd := &proto.Command{
+		ID:     uint32(c.nextMsgID()),
+		Method: proto.MethodTypePing,
 	}
-	cmdBytes, err := json.Marshal(cmd)
+	cmdBytes, err := c.commandEncoder.Encode(cmd)
 	if err != nil {
 		return err
 	}
@@ -1151,24 +1241,23 @@ func (c *Client) sendPing() error {
 	if err != nil {
 		return err
 	}
-	if r.Error != "" {
-		return errors.New(r.Error)
+	if r.Error != nil {
+		return r.Error
 	}
 	return nil
 }
 
-func (c *Client) sendSync(id int32, msg []byte, timeout time.Duration) (response, error) {
-	wait := make(chan response)
-	err := c.addWaiter(id, wait)
+func (c *Client) sendSync(id uint32, msg []byte, timeout time.Duration) (proto.Reply, error) {
+	waitCh := make(chan proto.Reply, 1)
+
+	c.addWaiter(id, waitCh)
 	defer c.removeWaiter(id)
+
+	err := c.send(msg)
 	if err != nil {
-		return response{}, err
+		return proto.Reply{}, err
 	}
-	err = c.send(msg)
-	if err != nil {
-		return response{}, err
-	}
-	return c.wait(wait, timeout)
+	return c.wait(waitCh, timeout)
 }
 
 func (c *Client) send(msg []byte) error {
@@ -1181,33 +1270,28 @@ func (c *Client) send(msg []byte) error {
 	return nil
 }
 
-func (c *Client) addWaiter(id int32, ch chan response) error {
+func (c *Client) addWaiter(id uint32, ch chan proto.Reply) {
 	c.waitersMutex.Lock()
 	defer c.waitersMutex.Unlock()
-	if _, ok := c.waiters[id]; ok {
-		return ErrDuplicateWaiter
-	}
 	c.waiters[id] = ch
-	return nil
 }
 
-func (c *Client) removeWaiter(id int32) error {
+func (c *Client) removeWaiter(id uint32) {
 	c.waitersMutex.Lock()
 	defer c.waitersMutex.Unlock()
 	delete(c.waiters, id)
-	return nil
 }
 
-func (c *Client) wait(ch chan response, timeout time.Duration) (response, error) {
+func (c *Client) wait(ch chan proto.Reply, timeout time.Duration) (proto.Reply, error) {
 	select {
 	case data, ok := <-ch:
 		if !ok {
-			return response{}, ErrWaiterClosed
+			return proto.Reply{}, ErrWaiterClosed
 		}
 		return data, nil
 	case <-time.After(timeout):
-		return response{}, ErrTimeout
+		return proto.Reply{}, ErrTimeout
 	case <-c.closed:
-		return response{}, ErrClientDisconnected
+		return proto.Reply{}, ErrClientClosed
 	}
 }
