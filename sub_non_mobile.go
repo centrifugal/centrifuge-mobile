@@ -2,7 +2,7 @@
 
 package centrifuge
 
-import "github.com/centrifugal/centrifuge-mobile/proto"
+import "github.com/centrifugal/centrifuge-mobile/internal/proto"
 
 // History allows to extract channel history.
 func (s *Sub) History() ([]proto.Pub, error) {

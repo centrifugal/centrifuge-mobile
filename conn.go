@@ -17,20 +17,20 @@ func closeErr(err error) (bool, int, string) {
 	return false, 0, ""
 }
 
-type connection interface {
-	Close()
-	WriteMessage([]byte) error
+type transport interface {
 	ReadMessage() ([]byte, error)
+	WriteMessage([]byte) error
+	Close()
 }
 
-type wsConn struct {
+type wsTransport struct {
 	conn         *websocket.Conn
 	writeTimeout time.Duration
 }
 
-type connFactory func(string, time.Duration, bool) (connection, error)
+type transportFactory func(string, time.Duration, bool) (transport, error)
 
-func newWSConnection(url string, writeTimeout time.Duration, compression bool) (connection, error) {
+func newWSTransport(url string, writeTimeout time.Duration, compression bool) (transport, error) {
 	wsHeaders := http.Header{}
 	dialer := websocket.DefaultDialer
 	if compression {
@@ -43,21 +43,21 @@ func newWSConnection(url string, writeTimeout time.Duration, compression bool) (
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		return nil, fmt.Errorf("Wrong status code while connecting to server: '%d'", resp.StatusCode)
 	}
-	return &wsConn{conn: conn, writeTimeout: writeTimeout}, nil
+	return &wsTransport{conn: conn, writeTimeout: writeTimeout}, nil
 }
 
-func (c *wsConn) Close() {
+func (c *wsTransport) Close() {
 	c.conn.Close()
 }
 
-func (c *wsConn) WriteMessage(msg []byte) error {
+func (c *wsTransport) WriteMessage(msg []byte) error {
 	c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
 	err := c.conn.WriteMessage(websocket.TextMessage, msg)
 	c.conn.SetWriteDeadline(time.Time{})
 	return err
 }
 
-func (c *wsConn) ReadMessage() ([]byte, error) {
+func (c *wsTransport) ReadMessage() ([]byte, error) {
 	_, message, err := c.conn.ReadMessage()
 	return message, err
 }

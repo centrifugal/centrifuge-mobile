@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/centrifugal/centrifuge-mobile/proto"
+	"github.com/centrifugal/centrifuge-mobile/internal/proto"
 )
 
 // SubscribeSuccessContext is a subscribe success event context passed to event callback.

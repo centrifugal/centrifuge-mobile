@@ -4,24 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/centrifugal/centrifuge-mobile/proto"
+	"github.com/centrifugal/centrifuge-mobile/internal/proto"
 	"github.com/jpillora/backoff"
 )
-
-// Exp is helper function to get sign exp timestamp as
-// string - i.e. in a format Centrifuge server expects.
-// Actually in most cases you need an analogue of this
-// function on your app backend when generating client
-// connection credentials.
-func Exp(ttlSeconds int) string {
-	return strconv.FormatInt(time.Now().Unix()+int64(ttlSeconds), 10)
-}
 
 // Credentials describe client connection parameters.
 type Credentials struct {
@@ -48,19 +38,26 @@ type disconnect struct {
 
 var (
 	// ErrTimeout ...
-	ErrTimeout            = errors.New("timeout")
-	ErrWaiterClosed       = errors.New("waiter closed")
-	ErrClientClosed       = errors.New("client closed")
+	ErrTimeout = errors.New("timeout")
+	// ErrClientClosed ...
+	ErrClientClosed = errors.New("client closed")
+	// ErrClientDisconnected ...
 	ErrClientDisconnected = errors.New("client disconnected")
-	ErrClientExpired      = errors.New("client connection expired")
-	ErrReconnectFailed    = errors.New("reconnect failed")
+	// ErrClientExpired ...
+	ErrClientExpired = errors.New("client connection expired")
+	// ErrReconnectFailed ...
+	ErrReconnectFailed = errors.New("reconnect failed")
 )
 
-var (
-	DefaultPrivateChannelPrefix     = "$"
-	DefaultTimeoutMilliseconds      = 5000
+const (
+	// DefaultPrivateChannelPrefix ...
+	DefaultPrivateChannelPrefix = "$"
+	// DefaultTimeoutMilliseconds ...
+	DefaultTimeoutMilliseconds = 5000
+	// DefaultPingIntervalMilliseconds ...
 	DefaultPingIntervalMilliseconds = 25000
-	DefaultPongWaitMilliseconds     = 10000
+	// DefaultPongWaitMilliseconds ...
+	DefaultPongWaitMilliseconds = 10000
 )
 
 // Config contains various client options.
@@ -116,7 +113,7 @@ type DisconnectContext struct {
 
 // ErrorContext is an error event context passed to OnError callback.
 type ErrorContext struct {
-	Error string
+	Message string
 }
 
 // ConnectHandler is an interface describing how to handle connect event.
@@ -183,6 +180,7 @@ func (h *EventHandler) OnError(handler ErrorHandler) {
 	h.onError = handler
 }
 
+// Describe client connection state.
 const (
 	DISCONNECTED = iota
 	CONNECTING
@@ -197,7 +195,7 @@ type Client struct {
 	encoding          proto.Encoding
 	config            *Config
 	credentials       *Credentials
-	conn              connection
+	transport         transport
 	msgID             int32
 	status            int
 	id                string
@@ -210,7 +208,7 @@ type Client struct {
 	closed            chan struct{}
 	reconnect         bool
 	reconnectStrategy reconnectStrategy
-	createConn        connFactory
+	createTransport   transportFactory
 	events            *EventHandler
 	delayPing         chan struct{}
 	paramsEncoder     proto.ParamsEncoder
@@ -241,7 +239,7 @@ func New(u string, events *EventHandler, config *Config) *Client {
 		waiters:           make(map[uint32]chan proto.Reply),
 		reconnect:         true,
 		reconnectStrategy: defaultBackoffReconnect,
-		createConn:        newWSConnection,
+		createTransport:   newWSTransport,
 		events:            events,
 		delayPing:         make(chan struct{}, 32),
 		paramsEncoder:     proto.GetParamsEncoder(encoding),
@@ -282,7 +280,7 @@ func (c *Client) handleError(err error) {
 		handler = c.events.onError
 	}
 	if handler != nil {
-		handler.OnError(c, &ErrorContext{Error: err.Error()})
+		handler.OnError(c, &ErrorContext{Message: err.Error()})
 	}
 }
 
@@ -317,9 +315,9 @@ func (c *Client) close() {
 	}
 	c.waitersMutex.Unlock()
 
-	if c.conn != nil {
-		c.conn.Close()
-		c.conn = nil
+	if c.transport != nil {
+		c.transport.Close()
+		c.transport = nil
 	}
 }
 
@@ -347,9 +345,9 @@ func (c *Client) handleDisconnect(d *disconnect) {
 	c.reconnect = d.Reconnect
 
 	if c.status == DISCONNECTED || c.status == CLOSED {
-		if c.conn != nil {
-			c.conn.Close()
-			c.conn = nil
+		if c.transport != nil {
+			c.transport.Close()
+			c.transport = nil
 		}
 		c.mutex.Unlock()
 		return
@@ -490,9 +488,9 @@ func (c *Client) pinger(closeCh chan struct{}) {
 	}
 }
 
-func (c *Client) reader(conn connection, closeCh chan struct{}) {
+func (c *Client) reader(t transport, closeCh chan struct{}) {
 	for {
-		message, err := conn.ReadMessage()
+		message, err := t.ReadMessage()
 		if err != nil {
 			disconnect := extractDisconnect(err)
 			c.handleDisconnect(disconnect)
@@ -514,11 +512,11 @@ func (c *Client) reader(conn connection, closeCh chan struct{}) {
 	}
 }
 
-func (c *Client) writer(conn connection, closeCh chan struct{}) {
+func (c *Client) writer(t transport, closeCh chan struct{}) {
 	for {
 		select {
 		case msg := <-c.write:
-			err := conn.WriteMessage(msg)
+			err := t.WriteMessage(msg)
 			if err != nil {
 				disconnect := extractDisconnect(err)
 				c.handleDisconnect(disconnect)
@@ -565,9 +563,7 @@ func (c *Client) handle(data []byte) error {
 				c.handleError(err)
 			}
 		}
-
 	}
-
 	return nil
 }
 
@@ -687,7 +683,7 @@ func (c *Client) connect() error {
 	c.closed = make(chan struct{})
 	c.mutex.Unlock()
 
-	conn, err := c.createConn(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond, c.config.WebsocketCompression)
+	t, err := c.createTransport(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond, c.config.WebsocketCompression)
 	if err != nil {
 		return err
 	}
@@ -698,15 +694,15 @@ func (c *Client) connect() error {
 		return nil
 	}
 
-	c.conn = conn
+	c.transport = t
 	closeCh := make(chan struct{})
 	c.closed = closeCh
 	c.write = make(chan []byte, 64)
 	c.receive = make(chan []byte, 64)
 	c.mutex.Unlock()
 
-	go c.reader(conn, closeCh)
-	go c.writer(conn, closeCh)
+	go c.reader(t, closeCh)
+	go c.writer(t, closeCh)
 
 	var res proto.ConnectResult
 
@@ -1286,7 +1282,7 @@ func (c *Client) wait(ch chan proto.Reply, timeout time.Duration) (proto.Reply, 
 	select {
 	case data, ok := <-ch:
 		if !ok {
-			return proto.Reply{}, ErrWaiterClosed
+			return proto.Reply{}, ErrClientDisconnected
 		}
 		return data, nil
 	case <-time.After(timeout):

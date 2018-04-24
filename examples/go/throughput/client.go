@@ -5,13 +5,17 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"log"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/centrifugal/centrifuge-mobile"
 )
+
+var protobuf = flag.Bool("protobuf", false, "Use Protobuf")
 
 // // In production you need to receive credentials from application backend.
 // func credentials(n int) *centrifuge.Credentials {
@@ -36,7 +40,10 @@ import (
 
 func newConnection(n int) *centrifuge.Client {
 	//creds := credentials(n)
-	wsURL := "ws://localhost:8000/connection/websocket?format=protobuf"
+	wsURL := "ws://localhost:8000/connection/websocket"
+	if *protobuf {
+		wsURL += "?format=protobuf"
+	}
 	c := centrifuge.New(wsURL, nil, centrifuge.DefaultConfig())
 
 	err := c.Connect()
@@ -64,9 +71,11 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, pub centrifuge.Pub) {
 }
 
 func main() {
+	flag.Parse()
+
 	var wg sync.WaitGroup
 	done := make(chan struct{})
-	numSubscribers := 1000
+	numSubscribers := 100
 	numPublish := 1000
 
 	wg.Add(numSubscribers)
@@ -95,10 +104,42 @@ func main() {
 	c := newConnection(numSubscribers + 1)
 	sub, _ := c.SubscribeSync(channel, nil)
 
-	data := map[string]string{"input": "1"}
-	dataBytes, _ := json.Marshal(data)
+	data := map[string]interface{}{
+		"_id":        "5adece493c1a23736b037c52",
+		"index":      2,
+		"guid":       "478a00f4-19b1-4567-8097-013b8cc846b8",
+		"isActive":   false,
+		"balance":    "$2,199.02",
+		"picture":    "http://placehold.it/32x32",
+		"age":        25,
+		"eyeColor":   "blue",
+		"name":       "Swanson Walker",
+		"gender":     "male",
+		"company":    "SHADEASE",
+		"email":      "swansonwalker@shadease.com",
+		"phone":      "+1 (885) 410-3991",
+		"address":    "768 Paerdegat Avenue, Gouglersville, Oklahoma, 5380",
+		"registered": "2016-01-24T07:40:09 -03:00",
+		"latitude":   -71.336378,
+		"longitude":  -28.155956,
+		"tags": []string{
+			"magna",
+			"nostrud",
+			"irure",
+			"aliquip",
+			"culpa",
+			"sint",
+		},
+		"greeting":      "Hello, Swanson Walker! You have 9 unread messages.",
+		"favoriteFruit": "apple",
+	}
 
-	semaphore := make(chan struct{}, 16)
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	semaphore := make(chan struct{}, runtime.NumCPU())
 	started := time.Now()
 	for i := 0; i < numPublish; i++ {
 		go func() {
