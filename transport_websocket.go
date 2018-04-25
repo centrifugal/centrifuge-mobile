@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/centrifugal/centrifuge-mobile/internal/proto"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,23 +18,22 @@ func closeErr(err error) (bool, int, string) {
 	return false, 0, ""
 }
 
-type transport interface {
-	ReadMessage() ([]byte, error)
-	WriteMessage([]byte) error
-	Close()
+type websocketTransport struct {
+	conn           *websocket.Conn
+	commandEncoder proto.CommandEncoder
+	replyDecoder   proto.ReplyDecoder
 }
 
-type wsTransport struct {
-	conn         *websocket.Conn
+type websocketTransportConfig struct {
+	encoding     proto.Encoding
 	writeTimeout time.Duration
+	compression  bool
 }
 
-type transportFactory func(string, time.Duration, bool) (transport, error)
-
-func newWSTransport(url string, writeTimeout time.Duration, compression bool) (transport, error) {
+func newWebsocketTransport(url string, config websocketTransport) (transport, error) {
 	wsHeaders := http.Header{}
 	dialer := websocket.DefaultDialer
-	if compression {
+	if config.compression {
 		dialer.EnableCompression = true
 	}
 	conn, resp, err := dialer.Dial(url, wsHeaders)
@@ -43,15 +43,15 @@ func newWSTransport(url string, writeTimeout time.Duration, compression bool) (t
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		return nil, fmt.Errorf("Wrong status code while connecting to server: '%d'", resp.StatusCode)
 	}
-	return &wsTransport{conn: conn, writeTimeout: writeTimeout}, nil
+	return &wsTransport{conn: conn, config: config}, nil
 }
 
-func (c *wsTransport) Close() {
-	c.conn.Close()
+func (c *wsTransport) Close() error {
+	return c.conn.Close()
 }
 
 func (c *wsTransport) WriteMessage(msg []byte) error {
-	c.conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+	c.conn.SetWriteDeadline(time.Now().Add(c.config.writeTimeout))
 	err := c.conn.WriteMessage(websocket.TextMessage, msg)
 	c.conn.SetWriteDeadline(time.Time{})
 	return err

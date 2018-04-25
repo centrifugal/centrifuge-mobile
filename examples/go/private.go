@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
 // In production you need to receive credentials from application backend.
@@ -18,17 +17,17 @@ func credentials() *centrifuge.Credentials {
 	// Application user ID.
 	user := "42"
 	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
+	timestamp := centrifuge.Exp(60)
 	// Empty info.
 	info := ""
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+	token := centrifuge.GenerateClientSign(secret, user, exp, info)
 
 	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
+		User:  user,
+		Exp:   exp,
+		Info:  info,
+		Token: token,
 	}
 }
 
@@ -40,7 +39,7 @@ func (h *eventHandler) OnPrivateSub(c *centrifuge.Client, req *centrifuge.Privat
 	// In most real application secret key must not be kept on client side
 	// and here must be request to your backend to get channel sign.
 	info := ""
-	sign := auth.GenerateChannelSign("secret", req.ClientID, req.Channel, info)
+	sign := centrifuge.GenerateChannelSign("secret", req.ClientID, req.Channel, info)
 	privateSign := &centrifuge.PrivateSign{Sign: sign, Info: info}
 	return privateSign, nil
 }
@@ -85,10 +84,7 @@ func main() {
 	events.OnSubscribeError(subEventHandler)
 
 	// Subscribe on private channel.
-	_, err := c.Subscribe("$public:chat", events)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	c.Subscribe("$public:chat", events)
 
 	select {}
 }

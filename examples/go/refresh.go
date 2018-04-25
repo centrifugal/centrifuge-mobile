@@ -8,7 +8,6 @@ import (
 	"log"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
 // In production you need to receive credentials from application backend.
@@ -18,27 +17,27 @@ func credentials() *centrifuge.Credentials {
 	// Application user ID.
 	user := "42"
 	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
+	timestamp := centrifuge.Exp(60)
 	// Empty info.
 	info := ""
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+	token := centrifuge.GenerateClientSign(secret, user, exp, info)
 
 	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
+		User:  user,
+		Exp:   exp,
+		Info:  info,
+		Token: token,
 	}
 }
 
 type eventHandler struct{}
 
-func (h *eventHandler) OnConnect(c *centrifuge.Client, ctx *centrifuge.ConnectContext) {
+func (h *eventHandler) OnConnect(c *centrifuge.Client, ctx centrifuge.ConnectContext) {
 	log.Println("Connected")
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx centrifuge.DisconnectContext) {
 	log.Println("Disconnected")
 }
 
@@ -49,7 +48,7 @@ func (h *eventHandler) OnRefresh(c *centrifuge.Client) (*centrifuge.Credentials,
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
+func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, pub centrifuge.Pub) {
 	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
 }
 

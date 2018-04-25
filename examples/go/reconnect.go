@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
 func init() {
@@ -22,17 +21,17 @@ func credentials() *centrifuge.Credentials {
 	// Application user ID.
 	user := "42"
 	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
+	timestamp := centrifuge.Exp(60)
 	// Empty info.
 	info := ""
 	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+	token := centrifuge.GenerateClientSign(secret, user, exp, info)
 
 	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
+		User:  user,
+		Exp:   exp,
+		Info:  info,
+		Token: token,
 	}
 }
 
@@ -89,10 +88,7 @@ func newConnection(done chan struct{}) *centrifuge.Client {
 	subEvents.OnSubscribeSuccess(subHandler)
 	subEvents.OnUnsubscribe(subHandler)
 
-	sub, err := c.Subscribe("public:chat", subEvents)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	sub := c.Subscribe("public:chat", subEvents)
 
 	go func() {
 		for {

@@ -98,5 +98,4 @@ func main() {
 	}
 
 	log.Printf("%s", time.Since(started))
-
 }
