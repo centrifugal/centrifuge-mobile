@@ -24,11 +24,6 @@
 #   go-tests = true
 #   unused-packages = true
 
-
-[[constraint]]
-  name = "github.com/centrifugal/centrifugo"
-  version = "1.7.9"
-
 [[constraint]]
   name = "github.com/gogo/protobuf"
   version = "1.0.0"

@@ -17,7 +17,6 @@ import (
 // ChatMessage is chat app specific message struct.
 type ChatMessage struct {
 	Input string `json:"input"`
-	Nick  string `json:"nick"`
 }
 
 // // In production you need to receive credentials from application backend.
@@ -61,7 +60,7 @@ func (h *eventHandler) OnMessage(sub *centrifuge.Sub, pub centrifuge.Pub) {
 	if err != nil {
 		return
 	}
-	rePrefix := chatMessage.Nick + " says:"
+	rePrefix := "Someone says:"
 	fmt.Fprintln(h.out, rePrefix, chatMessage.Input)
 }
 
@@ -83,14 +82,15 @@ func (h *eventHandler) OnUnsubscribe(sub *centrifuge.Sub, ctx centrifuge.Unsubsc
 
 func main() {
 	//creds := credentials()
-	wsURL := "ws://localhost:8000/connection/websocket"
+	//url := "ws://localhost:8000/connection/websocket?format=protobuf"
+	url := "grpc://localhost:8001"
 
 	handler := &eventHandler{os.Stdout}
 
 	events := centrifuge.NewEventHandler()
 	events.OnConnect(handler)
 	events.OnDisconnect(handler)
-	c := centrifuge.New(wsURL, events, centrifuge.DefaultConfig())
+	c := centrifuge.New(url, events, centrifuge.DefaultConfig())
 
 	subEvents := centrifuge.NewSubEventHandler()
 	subEvents.OnMessage(handler)
@@ -100,7 +100,7 @@ func main() {
 	subEvents.OnLeave(handler)
 
 	fmt.Fprintf(os.Stdout, "You can communicate with web version at https://jsfiddle.net/FZambia/yG7Uw/\n")
-	fmt.Fprintf(os.Stdout, "Connect to %s\n", wsURL)
+	fmt.Fprintf(os.Stdout, "Connect to %s\n", url)
 	fmt.Fprintf(os.Stdout, "Print something and press ENTER to send\n")
 
 	sub := c.Subscribe("chat:index", subEvents)
@@ -117,7 +117,6 @@ func main() {
 			text, _ := reader.ReadString('\n')
 			msg := &ChatMessage{
 				Input: text,
-				Nick:  "goexample",
 			}
 			data, _ := json.Marshal(msg)
 			sub.Publish(data)

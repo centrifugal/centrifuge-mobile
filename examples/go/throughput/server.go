@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,8 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/centrifugal/centrifuge"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"google.golang.org/grpc"
 )
 
 func handleLog(e centrifuge.LogEntry) {
@@ -47,7 +50,6 @@ func waitExitSignal(n *centrifuge.Node) {
 
 func main() {
 	cfg := centrifuge.DefaultConfig
-	cfg.ClientExpire = true
 	cfg.Namespaces = []centrifuge.ChannelNamespace{
 		centrifuge.ChannelNamespace{
 			Name: "benchmark",
@@ -81,6 +83,29 @@ func main() {
 	go func() {
 		if err := http.ListenAndServe(":8000", nil); err != nil {
 			panic(err)
+		}
+	}()
+
+	// Also handle GRPC client connections on :8002.
+	authInterceptor := func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		ctx := ss.Context()
+		newCtx := context.WithValue(ctx, centrifuge.CredentialsContextKey, &centrifuge.Credentials{
+			UserID: "42",
+			Exp:    time.Now().Unix() + 10,
+			Info:   []byte(`{"name": "Alexander"}`),
+		})
+		wrapped := grpc_middleware.WrapServerStream(ss)
+		wrapped.WrappedContext = newCtx
+		return handler(srv, wrapped)
+	}
+	grpcServer := grpc.NewServer(
+		grpc.StreamInterceptor(authInterceptor),
+	)
+	centrifuge.RegisterGRPCServerClient(node, grpcServer, centrifuge.GRPCClientServiceConfig{})
+	go func() {
+		listener, _ := net.Listen("tcp", ":8001")
+		if err := grpcServer.Serve(listener); err != nil {
+			log.Fatalf("Serve GRPC: %v", err)
 		}
 	}()
 

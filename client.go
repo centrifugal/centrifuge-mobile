@@ -1,9 +1,8 @@
 package centrifuge
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -204,11 +203,10 @@ type Client struct {
 	waitersMutex      sync.RWMutex
 	waiters           map[uint32]chan proto.Reply
 	receive           chan []byte
-	write             chan []byte
+	write             chan *proto.Command
 	closed            chan struct{}
 	reconnect         bool
 	reconnectStrategy reconnectStrategy
-	createTransport   transportFactory
 	events            *EventHandler
 	delayPing         chan struct{}
 	paramsEncoder     proto.ParamsEncoder
@@ -226,11 +224,19 @@ func (c *Client) nextMsgID() int32 {
 // EventHandler and Config.
 func New(u string, events *EventHandler, config *Config) *Client {
 	var encoding proto.Encoding
-	if strings.Contains(strings.ToLower(u), "format=protobuf") {
+
+	if strings.HasPrefix(u, "ws") {
+		if strings.Contains(strings.ToLower(u), "format=protobuf") {
+			encoding = proto.EncodingProtobuf
+		} else {
+			encoding = proto.EncodingJSON
+		}
+	} else if strings.HasPrefix(u, "grpc") {
 		encoding = proto.EncodingProtobuf
 	} else {
-		encoding = proto.EncodingJSON
+		panic(fmt.Sprintf("unsupported connection endpoint: %s", u))
 	}
+
 	c := &Client{
 		url:               u,
 		encoding:          encoding,
@@ -239,7 +245,6 @@ func New(u string, events *EventHandler, config *Config) *Client {
 		waiters:           make(map[uint32]chan proto.Reply),
 		reconnect:         true,
 		reconnectStrategy: defaultBackoffReconnect,
-		createTransport:   newWSTransport,
 		events:            events,
 		delayPing:         make(chan struct{}, 32),
 		paramsEncoder:     proto.GetParamsEncoder(encoding),
@@ -321,26 +326,14 @@ func (c *Client) close() {
 	}
 }
 
-func extractDisconnect(err error) *disconnect {
-	d := &disconnect{
-		Reason:    "connection closed",
-		Reconnect: true,
-	}
-	if err != nil {
-		ok, _, reason := closeErr(err)
-		if ok {
-			var disconnectAdvice disconnect
-			err := json.Unmarshal([]byte(reason), &disconnectAdvice)
-			if err == nil {
-				d.Reason = disconnectAdvice.Reason
-				d.Reconnect = disconnectAdvice.Reconnect
-			}
+func (c *Client) handleDisconnect(d *disconnect) {
+	if d == nil {
+		d = &disconnect{
+			Reason:    "connection closed",
+			Reconnect: true,
 		}
 	}
-	return d
-}
 
-func (c *Client) handleDisconnect(d *disconnect) {
 	c.mutex.Lock()
 	c.reconnect = d.Reconnect
 
@@ -478,7 +471,7 @@ func (c *Client) pinger(closeCh chan struct{}) {
 		case <-time.After(timeout):
 			err := c.sendPing()
 			if err != nil {
-				disconnect := extractDisconnect(err)
+				disconnect := c.transport.GetDisconnect()
 				c.handleDisconnect(disconnect)
 				return
 			}
@@ -490,9 +483,9 @@ func (c *Client) pinger(closeCh chan struct{}) {
 
 func (c *Client) reader(t transport, closeCh chan struct{}) {
 	for {
-		message, err := t.ReadMessage()
+		reply, err := t.Read()
 		if err != nil {
-			disconnect := extractDisconnect(err)
+			disconnect := c.transport.GetDisconnect()
 			c.handleDisconnect(disconnect)
 			return
 		}
@@ -504,7 +497,7 @@ func (c *Client) reader(t transport, closeCh chan struct{}) {
 			case c.delayPing <- struct{}{}:
 			default:
 			}
-			err := c.handle(message)
+			err := c.handle(reply)
 			if err != nil {
 				c.handleError(err)
 			}
@@ -515,10 +508,10 @@ func (c *Client) reader(t transport, closeCh chan struct{}) {
 func (c *Client) writer(t transport, closeCh chan struct{}) {
 	for {
 		select {
-		case msg := <-c.write:
-			err := t.WriteMessage(msg)
+		case cmd := <-c.write:
+			err := t.Write(cmd)
 			if err != nil {
-				disconnect := extractDisconnect(err)
+				disconnect := c.transport.GetDisconnect()
 				c.handleDisconnect(disconnect)
 				return
 			}
@@ -528,42 +521,26 @@ func (c *Client) writer(t transport, closeCh chan struct{}) {
 	}
 }
 
-func (c *Client) handle(data []byte) error {
-	if len(data) == 0 {
-		return nil
-	}
-
-	decoder := proto.GetReplyDecoder(c.encoding, data)
-	defer proto.PutReplyDecoder(c.encoding, decoder)
-
-	for {
-		reply, err := decoder.Decode()
+func (c *Client) handle(reply *proto.Reply) error {
+	if reply.ID > 0 {
+		c.waitersMutex.RLock()
+		if waiter, ok := c.waiters[reply.ID]; ok {
+			waiter <- *reply
+		}
+		c.waitersMutex.RUnlock()
+	} else {
+		messageDecoder := proto.GetMessageDecoder(c.encoding)
+		message, err := messageDecoder.Decode(reply.Result)
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
+			c.handleError(err)
 			return err
 		}
-
-		if reply.ID > 0 {
-			c.waitersMutex.RLock()
-			if waiter, ok := c.waiters[reply.ID]; ok {
-				waiter <- *reply
-			}
-			c.waitersMutex.RUnlock()
-		} else {
-			messageDecoder := proto.GetMessageDecoder(c.encoding)
-			message, err := messageDecoder.Decode(reply.Result)
-			if err != nil {
-				c.handleError(err)
-				continue
-			}
-			err = c.handleMessage(*message)
-			if err != nil {
-				c.handleError(err)
-			}
+		err = c.handleMessage(*message)
+		if err != nil {
+			c.handleError(err)
 		}
 	}
+
 	return nil
 }
 
@@ -656,8 +633,12 @@ func (c *Client) Connect() error {
 
 	err := c.connect()
 	if err != nil {
-		disconnect := extractDisconnect(err)
-		c.handleDisconnect(disconnect)
+		if c.transport != nil {
+			disconnect := c.transport.GetDisconnect()
+			c.handleDisconnect(disconnect)
+		} else {
+			c.handleDisconnect(nil)
+		}
 		return nil
 	}
 	err = c.resubscribe()
@@ -665,7 +646,7 @@ func (c *Client) Connect() error {
 		// we need just to close the connection and outgoing requests here
 		// but preserve all subscriptions.
 		c.close()
-		disconnect := extractDisconnect(err)
+		disconnect := c.transport.GetDisconnect()
 		c.handleDisconnect(disconnect)
 		return nil
 	}
@@ -683,9 +664,27 @@ func (c *Client) connect() error {
 	c.closed = make(chan struct{})
 	c.mutex.Unlock()
 
-	t, err := c.createTransport(c.url, time.Duration(c.config.TimeoutMilliseconds)*time.Millisecond, c.config.WebsocketCompression)
-	if err != nil {
-		return err
+	var t transport
+	var err error
+
+	if strings.HasPrefix(c.url, "ws") {
+		config := websocketTransportConfig{
+			encoding:     c.encoding,
+			writeTimeout: time.Duration(c.config.TimeoutMilliseconds) * time.Millisecond,
+			compression:  c.config.WebsocketCompression,
+		}
+		t, err = newWebsocketTransport(c.url, config)
+		if err != nil {
+			return err
+		}
+	} else {
+		config := grpcTransportConfig{
+			tls: false,
+		}
+		t, err = newGRPCTransport(c.url, config)
+		if err != nil {
+			return err
+		}
 	}
 
 	c.mutex.Lock()
@@ -697,7 +696,7 @@ func (c *Client) connect() error {
 	c.transport = t
 	closeCh := make(chan struct{})
 	c.closed = closeCh
-	c.write = make(chan []byte, 64)
+	c.write = make(chan *proto.Command, 64)
 	c.receive = make(chan []byte, 64)
 	c.mutex.Unlock()
 
@@ -836,11 +835,7 @@ func (c *Client) sendRefresh() error {
 	cmd.Params = paramsData
 	c.mutex.RUnlock()
 
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return err
 	}
@@ -891,11 +886,7 @@ func (c *Client) sendConnect() (proto.ConnectResult, error) {
 	}
 	c.mutex.RUnlock()
 
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return proto.ConnectResult{}, err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return proto.ConnectResult{}, err
 	}
@@ -1028,11 +1019,7 @@ func (c *Client) sendSubscribe(channel string, lastMessageID *string, privateSig
 		Method: proto.MethodTypeSubscribe,
 		Params: paramsData,
 	}
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return proto.SubscribeResult{}, err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return proto.SubscribeResult{}, err
 	}
@@ -1072,11 +1059,7 @@ func (c *Client) sendPublish(channel string, data []byte) (proto.PublishResult, 
 		Method: proto.MethodTypePublish,
 		Params: paramsData,
 	}
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return proto.PublishResult{}, err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return proto.PublishResult{}, err
 	}
@@ -1114,11 +1097,7 @@ func (c *Client) sendHistory(channel string) (proto.HistoryResult, error) {
 		Method: proto.MethodTypeHistory,
 		Params: paramsData,
 	}
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return proto.HistoryResult{}, err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return proto.HistoryResult{}, err
 	}
@@ -1160,11 +1139,7 @@ func (c *Client) sendPresence(channel string) (proto.PresenceResult, error) {
 		Method: proto.MethodTypePresence,
 		Params: paramsData,
 	}
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return proto.PresenceResult{}, err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return proto.PresenceResult{}, err
 	}
@@ -1205,11 +1180,7 @@ func (c *Client) sendUnsubscribe(channel string) (proto.UnsubscribeResult, error
 		Method: proto.MethodTypeUnsubscribe,
 		Params: paramsData,
 	}
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return proto.UnsubscribeResult{}, err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, c.timeout())
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
 	if err != nil {
 		return proto.UnsubscribeResult{}, err
 	}
@@ -1229,11 +1200,7 @@ func (c *Client) sendPing() error {
 		ID:     uint32(c.nextMsgID()),
 		Method: proto.MethodTypePing,
 	}
-	cmdBytes, err := c.commandEncoder.Encode(cmd)
-	if err != nil {
-		return err
-	}
-	r, err := c.sendSync(cmd.ID, cmdBytes, time.Duration(c.config.PongWaitMilliseconds)*time.Millisecond)
+	r, err := c.sendSync(cmd.ID, cmd, time.Duration(c.config.PongWaitMilliseconds)*time.Millisecond)
 	if err != nil {
 		return err
 	}
@@ -1243,25 +1210,25 @@ func (c *Client) sendPing() error {
 	return nil
 }
 
-func (c *Client) sendSync(id uint32, msg []byte, timeout time.Duration) (proto.Reply, error) {
+func (c *Client) sendSync(id uint32, cmd *proto.Command, timeout time.Duration) (proto.Reply, error) {
 	waitCh := make(chan proto.Reply, 1)
 
 	c.addWaiter(id, waitCh)
 	defer c.removeWaiter(id)
 
-	err := c.send(msg)
+	err := c.send(cmd)
 	if err != nil {
 		return proto.Reply{}, err
 	}
 	return c.wait(waitCh, timeout)
 }
 
-func (c *Client) send(msg []byte) error {
+func (c *Client) send(cmd *proto.Command) error {
 	select {
 	case <-c.closed:
 		return ErrClientDisconnected
 	default:
-		c.write <- msg
+		c.write <- cmd
 	}
 	return nil
 }

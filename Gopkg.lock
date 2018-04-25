@@ -2,10 +2,31 @@
 
 
 [[projects]]
-  name = "github.com/centrifugal/centrifugo"
-  packages = ["libcentrifugo/auth"]
-  revision = "ba961d3b50c6c95533b6d61629dd29592ad186c0"
-  version = "v1.7.9"
+  name = "github.com/FZambia/sentinel"
+  packages = ["."]
+  revision = "e69a8dc549bb0aabdc63fbfd9e8bfe971a368153"
+  version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/beorn7/perks"
+  packages = ["quantile"]
+  revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/centrifugal/centrifuge"
+  packages = [
+    ".",
+    "internal/auth",
+    "internal/priority",
+    "internal/proto",
+    "internal/proto/apiproto",
+    "internal/proto/controlproto",
+    "internal/queue",
+    "internal/uuid"
+  ]
+  revision = "e096c51a3b092daf2a12c5ca1403e402fdf92d86"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -33,9 +54,13 @@
   version = "v1.0.0"
 
 [[projects]]
-  name = "github.com/gorilla/securecookie"
-  packages = ["."]
-  revision = "e95799a481bbcc3d01c2ad5178524cb8bec9f370"
+  name = "github.com/gomodule/redigo"
+  packages = [
+    "internal",
+    "redis"
+  ]
+  revision = "9c11da706d9b7902c6da69c592f75637793fe121"
+  version = "v2.0.0"
 
 [[projects]]
   name = "github.com/gorilla/websocket"
@@ -44,10 +69,61 @@
   version = "v1.2.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/igm/sockjs-go"
+  packages = ["sockjs"]
+  revision = "c8a8c6429d10e3b6865960ad8cb43779b8a834ef"
+
+[[projects]]
   name = "github.com/jpillora/backoff"
   packages = ["."]
   revision = "8eab2debe79d12b7bd3d10653910df25fa9552ba"
   version = "1.0.0"
+
+[[projects]]
+  name = "github.com/matttproud/golang_protobuf_extensions"
+  packages = ["pbutil"]
+  revision = "3247c84500bff8d9fb6d579d800f20b3e091582c"
+  version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/nats-io/nuid"
+  packages = ["."]
+  revision = "289cccf02c178dc782430d534e3c1f5b72af807f"
+  version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/client_golang"
+  packages = ["prometheus"]
+  revision = "82f5ff156b29e276022b1a958f7d385870fb9814"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/client_model"
+  packages = ["go"]
+  revision = "99fa1f4be8e564e8a6b613da7fa6f46c9edafc6c"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/common"
+  packages = [
+    "expfmt",
+    "internal/bitbucket.org/ww/goautoneg",
+    "model"
+  ]
+  revision = "e5b036cc37a466a0af27d604d1ee500211d16d6a"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/procfs"
+  packages = [
+    ".",
+    "internal/util",
+    "nfs",
+    "xfs"
+  ]
+  revision = "8b1c2da0d56deffdbb9e48d4414b4e674bd8083e"
 
 [[projects]]
   branch = "master"
@@ -124,6 +200,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2b11dbe9798a8387f0c45d30366cedcfb41d23e2ed20bbf11d5a9ce1df7c13c2"
+  inputs-digest = "9df9f43499f913c174931b9fe2fc7eb96982bd6e3ce397cd48a5eb9a5e350f72"
   solver-name = "gps-cdcl"
   solver-version = 1

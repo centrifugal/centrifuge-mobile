@@ -70,11 +70,6 @@ func GetReplyDecoder(enc Encoding, data []byte) ReplyDecoder {
 	return NewProtobufReplyDecoder(data)
 }
 
-// PutReplyDecoder ...
-func PutReplyDecoder(enc Encoding, e ReplyDecoder) {
-	return
-}
-
 // GetResultDecoder ...
 func GetResultDecoder(enc Encoding) ResultDecoder {
 	if enc == EncodingJSON {
@@ -96,15 +91,15 @@ func GetParamsEncoder(enc Encoding) ParamsEncoder {
 	return NewProtobufParamsEncoder()
 }
 
+// PutParamsEncoder ...
+func PutParamsEncoder(enc Encoding, e ParamsEncoder) {
+	return
+}
+
 // GetCommandEncoder ...
 func GetCommandEncoder(enc Encoding) CommandEncoder {
 	if enc == EncodingJSON {
 		return NewJSONCommandEncoder()
 	}
 	return NewProtobufCommandEncoder()
-}
-
-// PutParamsEncoder ...
-func PutParamsEncoder(enc Encoding, e ParamsEncoder) {
-	return
 }

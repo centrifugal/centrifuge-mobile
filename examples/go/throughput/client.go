@@ -44,7 +44,7 @@ func newConnection(n int) *centrifuge.Client {
 	if *protobuf {
 		wsURL += "?format=protobuf"
 	}
-	c := centrifuge.New(wsURL, nil, centrifuge.DefaultConfig())
+	c := centrifuge.New("grpc://localhost:8001", nil, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
