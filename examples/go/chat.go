@@ -49,6 +49,11 @@ func (h *eventHandler) OnConnect(c *centrifuge.Client, ctx *centrifuge.ConnectCo
 	return
 }
 
+func (h *eventHandler) OnError(c *centrifuge.Client, ctx *centrifuge.ErrorContext) {
+	fmt.Fprintln(h.out, fmt.Sprintf("Error: %s", ctx.Message))
+	return
+}
+
 func (h *eventHandler) OnDisconnect(c *centrifuge.Client, ctx *centrifuge.DisconnectContext) {
 	fmt.Fprintln(h.out, fmt.Sprintf("Disconnected from chat: %s", ctx.Reason))
 	return
@@ -82,13 +87,14 @@ func (h *eventHandler) OnUnsubscribe(sub *centrifuge.Sub, ctx centrifuge.Unsubsc
 
 func main() {
 	//creds := credentials()
-	//url := "ws://localhost:8000/connection/websocket?format=protobuf"
-	url := "grpc://localhost:8001"
+	url := "ws://localhost:8000/connection/websocket"
+	//url := "grpc://localhost:8001"
 
 	handler := &eventHandler{os.Stdout}
 
 	events := centrifuge.NewEventHandler()
 	events.OnConnect(handler)
+	events.OnError(handler)
 	events.OnDisconnect(handler)
 	c := centrifuge.New(url, events, centrifuge.DefaultConfig())
 

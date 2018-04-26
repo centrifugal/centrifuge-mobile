@@ -27,10 +27,7 @@ func extractDisconnectGRPC(md metadata.MD) *disconnect {
 			}
 		}
 	}
-	return &disconnect{
-		Reason:    "connection closed",
-		Reconnect: true,
-	}
+	return nil
 }
 
 type grpcTransport struct {
@@ -99,18 +96,14 @@ func (t *grpcTransport) Write(cmd *proto.Command) error {
 	return t.stream.Send(cmd)
 }
 
-func (t *grpcTransport) Read() (*proto.Reply, error) {
+func (t *grpcTransport) Read() (*proto.Reply, *disconnect, error) {
 	select {
 	case reply, ok := <-t.replyCh:
 		if !ok {
-			return nil, io.EOF
+			return nil, t.disconnect, io.EOF
 		}
-		return reply, nil
+		return reply, nil, nil
 	}
-}
-
-func (t *grpcTransport) GetDisconnect() *disconnect {
-	return t.disconnect
 }
 
 func (t *grpcTransport) reader() {

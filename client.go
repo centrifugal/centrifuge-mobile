@@ -204,7 +204,7 @@ type Client struct {
 	waiters           map[uint32]chan proto.Reply
 	receive           chan []byte
 	write             chan *proto.Command
-	closed            chan struct{}
+	closeCh           chan struct{}
 	reconnect         bool
 	reconnectStrategy reconnectStrategy
 	events            *EventHandler
@@ -290,24 +290,12 @@ func (c *Client) handleError(err error) {
 }
 
 // Close closes Client connection and cleans ups everything.
-// TODO: check unsubscribe and disconnect called.
-func (c *Client) Close() {
+func (c *Client) Close() error {
+	err := c.Disconnect()
 	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	// if c.status == CONNECTED {
-	// 	c.subsMutex.RLock()
-	// 	unsubs := make(map[string]*Sub, len(c.subs))
-	// 	for ch, sub := range c.subs {
-	// 		unsubs[ch] = sub
-	// 	}
-	// 	c.subsMutex.RUnlock()
-	// 	for ch, sub := range unsubs {
-	// 		c.unsubscribe(sub.Channel())
-	// 		delete(c.subs, ch)
-	// 	}
-	// }
-	c.close()
 	c.status = CLOSED
+	c.mutex.Unlock()
+	return err
 }
 
 // close clean ups ws connection and all outgoing requests.
@@ -354,9 +342,9 @@ func (c *Client) handleDisconnect(d *disconnect) {
 	c.waitersMutex.Unlock()
 
 	select {
-	case <-c.closed:
+	case <-c.closeCh:
 	default:
-		close(c.closed)
+		close(c.closeCh)
 	}
 	c.status = DISCONNECTED
 
@@ -471,8 +459,7 @@ func (c *Client) pinger(closeCh chan struct{}) {
 		case <-time.After(timeout):
 			err := c.sendPing()
 			if err != nil {
-				disconnect := c.transport.GetDisconnect()
-				c.handleDisconnect(disconnect)
+				c.handleDisconnect(&disconnect{Reason: "no ping", Reconnect: true})
 				return
 			}
 		case <-closeCh:
@@ -483,9 +470,8 @@ func (c *Client) pinger(closeCh chan struct{}) {
 
 func (c *Client) reader(t transport, closeCh chan struct{}) {
 	for {
-		reply, err := t.Read()
+		reply, disconnect, err := t.Read()
 		if err != nil {
-			disconnect := c.transport.GetDisconnect()
 			c.handleDisconnect(disconnect)
 			return
 		}
@@ -511,8 +497,7 @@ func (c *Client) writer(t transport, closeCh chan struct{}) {
 		case cmd := <-c.write:
 			err := t.Write(cmd)
 			if err != nil {
-				disconnect := c.transport.GetDisconnect()
-				c.handleDisconnect(disconnect)
+				c.handleDisconnect(&disconnect{Reason: "write error", Reconnect: true})
 				return
 			}
 		case <-closeCh:
@@ -633,10 +618,8 @@ func (c *Client) Connect() error {
 
 	err := c.connect()
 	if err != nil {
-		if c.transport != nil {
-			disconnect := c.transport.GetDisconnect()
-			c.handleDisconnect(disconnect)
-		} else {
+		if c.transport == nil {
+			c.handleError(err)
 			c.handleDisconnect(nil)
 		}
 		return nil
@@ -646,8 +629,6 @@ func (c *Client) Connect() error {
 		// we need just to close the connection and outgoing requests here
 		// but preserve all subscriptions.
 		c.close()
-		disconnect := c.transport.GetDisconnect()
-		c.handleDisconnect(disconnect)
 		return nil
 	}
 
@@ -661,7 +642,7 @@ func (c *Client) connect() error {
 		return nil
 	}
 	c.status = CONNECTING
-	c.closed = make(chan struct{})
+	c.closeCh = make(chan struct{})
 	c.mutex.Unlock()
 
 	var t transport
@@ -695,7 +676,7 @@ func (c *Client) connect() error {
 
 	c.transport = t
 	closeCh := make(chan struct{})
-	c.closed = closeCh
+	c.closeCh = closeCh
 	c.write = make(chan *proto.Command, 64)
 	c.receive = make(chan []byte, 64)
 	c.mutex.Unlock()
@@ -738,7 +719,7 @@ func (c *Client) connect() error {
 		go func(interval uint32) {
 			tick := time.After(time.Duration(interval) * time.Second)
 			select {
-			case <-c.closed:
+			case <-c.closeCh:
 				return
 			case <-tick:
 				c.sendRefresh()
@@ -854,7 +835,7 @@ func (c *Client) sendRefresh() error {
 		go func(interval uint32) {
 			tick := time.After(time.Duration(interval) * time.Second)
 			select {
-			case <-c.closed:
+			case <-c.closeCh:
 				return
 			case <-tick:
 				c.sendRefresh()
@@ -1225,7 +1206,7 @@ func (c *Client) sendSync(id uint32, cmd *proto.Command, timeout time.Duration) 
 
 func (c *Client) send(cmd *proto.Command) error {
 	select {
-	case <-c.closed:
+	case <-c.closeCh:
 		return ErrClientDisconnected
 	default:
 		c.write <- cmd
@@ -1254,7 +1235,7 @@ func (c *Client) wait(ch chan proto.Reply, timeout time.Duration) (proto.Reply, 
 		return data, nil
 	case <-time.After(timeout):
 		return proto.Reply{}, ErrTimeout
-	case <-c.closed:
+	case <-c.closeCh:
 		return proto.Reply{}, ErrClientClosed
 	}
 }

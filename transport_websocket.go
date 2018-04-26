@@ -80,10 +80,6 @@ func newWebsocketTransport(url string, config websocketTransportConfig) (transpo
 	return t, nil
 }
 
-func (t *websocketTransport) GetDisconnect() *disconnect {
-	return t.disconnect
-}
-
 func (t *websocketTransport) Close() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -145,10 +141,10 @@ func (t *websocketTransport) Write(cmd *proto.Command) error {
 	return err
 }
 
-func (t *websocketTransport) Read() (*proto.Reply, error) {
+func (t *websocketTransport) Read() (*proto.Reply, *disconnect, error) {
 	reply, ok := <-t.replyCh
 	if !ok {
-		return nil, io.EOF
+		return nil, t.disconnect, io.EOF
 	}
-	return reply, nil
+	return reply, nil, nil
 }
