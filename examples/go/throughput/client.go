@@ -7,15 +7,19 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
+	"net/http"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/centrifugal/centrifuge-mobile"
 )
 
-var protobuf = flag.Bool("protobuf", false, "Use Protobuf")
+var protobuf = flag.Bool("protobuf", false, "Use Websocket with Protobuf")
+var grpc = flag.Bool("grpc", false, "Use GRPC")
 
 // // In production you need to receive credentials from application backend.
 // func credentials(n int) *centrifuge.Credentials {
@@ -40,11 +44,16 @@ var protobuf = flag.Bool("protobuf", false, "Use Protobuf")
 
 func newConnection(n int) *centrifuge.Client {
 	//creds := credentials(n)
-	wsURL := "ws://localhost:8000/connection/websocket"
-	if *protobuf {
-		wsURL += "?format=protobuf"
+	var url string
+	if *grpc {
+		url = "grpc://localhost:8001"
+	} else {
+		url = "ws://localhost:8000/connection/websocket"
+		if *protobuf {
+			url += "?format=protobuf"
+		}
 	}
-	c := centrifuge.New("grpc://localhost:8001", nil, centrifuge.DefaultConfig())
+	c := centrifuge.New(url, nil, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
@@ -71,6 +80,10 @@ func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, pub centrifuge.Pub) {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe(":3000", nil)
+	}()
+
 	flag.Parse()
 
 	var wg sync.WaitGroup

@@ -97,6 +97,7 @@ func (h *SubEventHandler) OnSubscribeError(handler SubscribeErrorHandler) {
 	h.onSubscribeError = handler
 }
 
+// Describe different states of Sub.
 const (
 	NEW = iota
 	SUBSCRIBING

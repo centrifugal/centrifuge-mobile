@@ -93,7 +93,7 @@ func newGRPCTransport(u string, config grpcTransportConfig) (transport, error) {
 	return t, nil
 }
 
-func (t grpcTransport) Write(cmd *proto.Command) error {
+func (t *grpcTransport) Write(cmd *proto.Command) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.stream.Send(cmd)
@@ -126,7 +126,8 @@ func (t *grpcTransport) reader() {
 		select {
 		case t.replyCh <- reply:
 		default:
-			// Can't keep up with
+			// Can't keep up with message stream.
+			t.disconnect = &disconnect{Reason: "client slow", Reconnect: true}
 			return
 		}
 	}
