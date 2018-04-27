@@ -17,16 +17,16 @@ type testMessage struct {
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg centrifuge.Pub) {
-	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
+func (h *subEventHandler) OnPublication(sub *centrifuge.Sub, e centrifuge.PublicationEvent) {
+	log.Println(fmt.Sprintf("New publication received from channel %s: %s", sub.Channel(), string(e.Data)))
 }
 
-func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg centrifuge.ClientInfo) {
-	log.Println(fmt.Sprintf("User %s (client ID %s) joined channel %s", msg.User, msg.Client, sub.Channel()))
+func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, e centrifuge.JoinEvent) {
+	log.Println(fmt.Sprintf("User %s (client ID %s) joined channel %s", e.User, e.Client, sub.Channel()))
 }
 
-func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg centrifuge.ClientInfo) {
-	log.Println(fmt.Sprintf("User %s (client ID %s) left channel %s", msg.User, msg.Client, sub.Channel()))
+func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, e centrifuge.LeaveEvent) {
+	log.Println(fmt.Sprintf("User %s (client ID %s) left channel %s", e.User, e.Client, sub.Channel()))
 }
 
 // // In production you need to receive credentials from application backend.
@@ -67,7 +67,7 @@ func main() {
 
 	events := centrifuge.NewSubEventHandler()
 	subEventHandler := &subEventHandler{}
-	events.OnMessage(subEventHandler)
+	events.OnPublication(subEventHandler)
 	events.OnJoin(subEventHandler)
 	events.OnLeave(subEventHandler)
 

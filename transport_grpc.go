@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/url"
 	"sync"
 
@@ -38,6 +37,7 @@ type grpcTransport struct {
 	replyCh    chan *proto.Reply
 	stream     proto.Centrifuge_CommunicateClient
 	closed     bool
+	closeCh    chan struct{}
 }
 
 type grpcTransportConfig struct {
@@ -49,11 +49,11 @@ func newGRPCTransport(u string, config grpcTransportConfig) (transport, error) {
 	var opts []grpc.DialOption
 	if config.tls && config.certFile != "" {
 		// openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./server.key -out ./server.cert
-		cred, err := credentials.NewClientTLSFromFile(config.certFile, "")
+		creds, err := credentials.NewClientTLSFromFile(config.certFile, "")
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
-		opts = append(opts, grpc.WithTransportCredentials(cred))
+		opts = append(opts, grpc.WithTransportCredentials(creds))
 	} else if config.tls {
 		creds := credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})
 		opts = append(opts, grpc.WithTransportCredentials(creds))
@@ -74,7 +74,8 @@ func newGRPCTransport(u string, config grpcTransportConfig) (transport, error) {
 	t := &grpcTransport{
 		conn:    conn,
 		config:  config,
-		replyCh: make(chan *proto.Reply, 64),
+		replyCh: make(chan *proto.Reply, 128),
+		closeCh: make(chan struct{}),
 	}
 
 	client := proto.NewCentrifugeClient(conn)
@@ -108,6 +109,7 @@ func (t *grpcTransport) Read() (*proto.Reply, *disconnect, error) {
 
 func (t *grpcTransport) reader() {
 	defer t.Close()
+	defer close(t.replyCh)
 
 	for {
 		reply, err := t.stream.Recv()
@@ -117,9 +119,11 @@ func (t *grpcTransport) reader() {
 			return
 		}
 		select {
+		case <-t.closeCh:
+			return
 		case t.replyCh <- reply:
 		default:
-			// Can't keep up with message stream.
+			// Can't keep up with server message rate.
 			t.disconnect = &disconnect{Reason: "client slow", Reconnect: true}
 			return
 		}
@@ -133,6 +137,6 @@ func (t *grpcTransport) Close() error {
 		return nil
 	}
 	t.closed = true
-	close(t.replyCh)
+	close(t.closeCh)
 	return t.conn.Close()
 }

@@ -16,18 +16,18 @@ func credentials() *centrifuge.Credentials {
 	secret := "secret"
 	// Application user ID.
 	user := "42"
-	// Current timestamp as string.
-	timestamp := centrifuge.Exp(60)
+	// Exp as string.
+	exp := centrifuge.Exp(60)
 	// Empty info.
 	info := ""
-	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := centrifuge.GenerateClientSign(secret, user, exp, info)
+	// Generate sign so Centrifugo server can trust connection parameters received from client.
+	sign := centrifuge.GenerateClientSign(secret, user, exp, info)
 
 	return &centrifuge.Credentials{
-		User:  user,
-		Exp:   exp,
-		Info:  info,
-		Token: token,
+		User: user,
+		Exp:  exp,
+		Info: info,
+		Sign: sign,
 	}
 }
 
@@ -46,13 +46,13 @@ func (h *eventHandler) OnPrivateSub(c *centrifuge.Client, req *centrifuge.Privat
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, ctx *centrifuge.SubscribeSuccessContext) {
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Sub, e *centrifuge.SubscribeSuccessEvent) {
 	log.Println(fmt.Sprintf("Successfully subscribed on private channel %s", sub.Channel()))
 	os.Exit(0)
 }
 
-func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, ctx *centrifuge.SubscribeErrorContext) {
-	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), ctx.Error))
+func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Sub, e *centrifuge.SubscribeErrorEvent) {
+	log.Println(fmt.Sprintf("Error subscribing to private channel %s: %v", sub.Channel(), e.Error))
 	os.Exit(1)
 }
 

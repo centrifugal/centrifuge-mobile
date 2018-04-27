@@ -27,7 +27,7 @@ enum MethodType {
     PRESENCE_STATS = 5 [(gogoproto.enumvalue_customname) = "MethodTypePresenceStats"];
     HISTORY = 6 [(gogoproto.enumvalue_customname) = "MethodTypeHistory"];
     PING = 7 [(gogoproto.enumvalue_customname) = "MethodTypePing"];
-    MESSAGE = 8 [(gogoproto.enumvalue_customname) = "MethodTypeMessage"];
+    SEND = 8 [(gogoproto.enumvalue_customname) = "MethodTypeSend"];
     RPC = 9 [(gogoproto.enumvalue_customname) = "MethodTypeRPC"];
     REFRESH = 10 [(gogoproto.enumvalue_customname) = "MethodTypeRefresh"];
 }
@@ -44,17 +44,17 @@ message Reply {
     bytes result = 3 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "result,omitempty", (gogoproto.nullable) = false];
 }
 
-enum MessageType {
+enum PushType {
     option (gogoproto.goproto_enum_prefix) = false;
-    PUB = 0 [(gogoproto.enumvalue_customname) = "MessageTypePub"];
-    JOIN = 1 [(gogoproto.enumvalue_customname) = "MessageTypeJoin"];
-    LEAVE = 2 [(gogoproto.enumvalue_customname) = "MessageTypeLeave"];
-    UNSUB = 3 [(gogoproto.enumvalue_customname) = "MessageTypeUnsub"];
-    PUSH = 4 [(gogoproto.enumvalue_customname) = "MessageTypePush"];
+    PUBLICATION = 0 [(gogoproto.enumvalue_customname) = "PushTypePublication"];
+    JOIN = 1 [(gogoproto.enumvalue_customname) = "PushTypeJoin"];
+    LEAVE = 2 [(gogoproto.enumvalue_customname) = "PushTypeLeave"];
+    UNSUB = 3 [(gogoproto.enumvalue_customname) = "PushTypeUnsub"];
+    MESSAGE = 4 [(gogoproto.enumvalue_customname) = "PushTypeMessage"];
 }
 
-message Message {
-    MessageType type = 1 [(gogoproto.jsontag) = "type,omitempty"];
+message Push {
+    PushType type = 1 [(gogoproto.jsontag) = "type,omitempty"];
     string channel = 2 [(gogoproto.jsontag) = "channel,omitempty"];
     bytes data = 3 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data", (gogoproto.nullable) = false];
 }
@@ -66,11 +66,7 @@ message ClientInfo {
     bytes chan_info = 4 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "chan_info,omitempty", (gogoproto.nullable) = false];
 }
 
-message Push {
-    bytes data = 1 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data", (gogoproto.nullable) = false];
-}
-
-message Pub {
+message Publication {
     string uid = 1 [(gogoproto.customname) = "UID", (gogoproto.jsontag) = "uid,omitempty"];
     bytes data = 2 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data", (gogoproto.nullable) = false];
     ClientInfo info = 3 [(gogoproto.jsontag) = "info,omitempty"];
@@ -85,6 +81,10 @@ message Leave {
 }
 
 message Unsub {}
+
+message Message {
+    bytes data = 1 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data", (gogoproto.nullable) = false];
+}
 
 message ConnectRequest {
     string user = 1 [(gogoproto.jsontag) = "user"];
@@ -145,7 +145,7 @@ message SubscribeResponse {
 message SubscribeResult {
     string last = 1 [(gogoproto.jsontag) = "last,omitempty"];
     bool recovered = 2 [(gogoproto.jsontag) = "recovered,omitempty"];
-    repeated Pub pubs = 3 [(gogoproto.jsontag) = "pubs,omitempty"];
+    repeated Publication publications = 3 [(gogoproto.jsontag) = "publications,omitempty"];
 }
 
 message UnsubscribeRequest {
@@ -208,7 +208,7 @@ message HistoryResponse {
 }
 
 message HistoryResult {
-    repeated Pub pubs = 1 [(gogoproto.jsontag) = "pubs"];
+    repeated Publication publications = 1 [(gogoproto.jsontag) = "publications"];
 }
 
 message PingRequest {
@@ -237,7 +237,7 @@ message RPCResult {
     bytes data = 1  [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data,omitempty", (gogoproto.nullable) = false];
 }
 
-message MessageRequest{
+message SendRequest{
     bytes data = 1 [(gogoproto.customtype) = "Raw", (gogoproto.jsontag) = "data", (gogoproto.nullable) = false];
 }
 

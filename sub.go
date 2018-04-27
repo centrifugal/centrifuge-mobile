@@ -7,54 +7,69 @@ import (
 	"github.com/centrifugal/centrifuge-mobile/internal/proto"
 )
 
-// SubscribeSuccessContext is a subscribe success event context passed to event callback.
-type SubscribeSuccessContext struct {
+// SubscribeSuccessEvent is a subscribe success event context passed to event callback.
+type SubscribeSuccessEvent struct {
 	Resubscribed bool
 	Recovered    bool
 }
 
-// SubscribeErrorContext is a subscribe error event context passed to event callback.
-type SubscribeErrorContext struct {
+// SubscribeErrorEvent is a subscribe error event context passed to event callback.
+type SubscribeErrorEvent struct {
 	Error string
 }
 
-// UnsubscribeContext is a context passed to unsubscribe event callback.
-type UnsubscribeContext struct{}
+// UnsubscribeEvent is a context passed to unsubscribe event callback.
+type UnsubscribeEvent struct{}
 
-// MessageHandler is a function to handle messages in channels.
-type MessageHandler interface {
-	OnMessage(*Sub, proto.Pub)
+// LeaveEvent ...
+type LeaveEvent struct {
+	ClientInfo
+}
+
+// JoinEvent ...
+type JoinEvent struct {
+	ClientInfo
+}
+
+// PublicationEvent ...
+type PublicationEvent struct {
+	Publication
+}
+
+// PublicationHandler is a function to handle messages published in channels.
+type PublicationHandler interface {
+	OnPublication(*Sub, PublicationEvent)
 }
 
 // JoinHandler is a function to handle join messages.
 type JoinHandler interface {
-	OnJoin(*Sub, proto.ClientInfo)
+	OnJoin(*Sub, JoinEvent)
 }
 
 // LeaveHandler is a function to handle leave messages.
 type LeaveHandler interface {
-	OnLeave(*Sub, proto.ClientInfo)
+	OnLeave(*Sub, LeaveEvent)
 }
 
 // UnsubscribeHandler is a function to handle unsubscribe event.
 type UnsubscribeHandler interface {
-	OnUnsubscribe(*Sub, UnsubscribeContext)
+	OnUnsubscribe(*Sub, UnsubscribeEvent)
 }
 
 // SubscribeSuccessHandler is a function to handle subscribe success event.
 type SubscribeSuccessHandler interface {
-	OnSubscribeSuccess(*Sub, SubscribeSuccessContext)
+	OnSubscribeSuccess(*Sub, SubscribeSuccessEvent)
 }
 
 // SubscribeErrorHandler is a function to handle subscribe error event.
 type SubscribeErrorHandler interface {
-	OnSubscribeError(*Sub, SubscribeErrorContext)
+	OnSubscribeError(*Sub, SubscribeErrorEvent)
 }
 
 // SubEventHandler contains callback functions that will be called when
 // corresponding event happens with subscription to channel.
 type SubEventHandler struct {
-	onMessage          MessageHandler
+	onPublication      PublicationHandler
 	onJoin             JoinHandler
 	onLeave            LeaveHandler
 	onUnsubscribe      UnsubscribeHandler
@@ -67,9 +82,9 @@ func NewSubEventHandler() *SubEventHandler {
 	return &SubEventHandler{}
 }
 
-// OnMessage allows to set MessageHandler to SubEventHandler.
-func (h *SubEventHandler) OnMessage(handler MessageHandler) {
-	h.onMessage = handler
+// OnPublication allows to set PublicationHandler to SubEventHandler.
+func (h *SubEventHandler) OnPublication(handler PublicationHandler) {
+	h.onPublication = handler
 }
 
 // OnJoin allows to set JoinHandler to SubEventHandler.
@@ -156,7 +171,7 @@ func (s *Sub) newSubFuture() chan error {
 func (s *Sub) resolveSubFutures(err error) {
 	for _, ch := range s.subFutures {
 		select {
-		case ch <- nil:
+		case ch <- err:
 		default:
 		}
 	}
@@ -174,7 +189,7 @@ func (s *Sub) removeSubFuture(subFuture chan error) {
 	s.mu.Unlock()
 }
 
-// Publish allows to publish JSON encoded data to subscription channel.
+// Publish allows to publish data to channel.
 func (s *Sub) Publish(data []byte) error {
 	subFuture := s.newSubFuture()
 	select {
@@ -189,7 +204,7 @@ func (s *Sub) Publish(data []byte) error {
 	}
 }
 
-func (s *Sub) history() ([]proto.Pub, error) {
+func (s *Sub) history() ([]Publication, error) {
 	subFuture := s.newSubFuture()
 	select {
 	case err := <-subFuture:
@@ -243,7 +258,7 @@ func (s *Sub) triggerOnUnsubscribe(needResubscribe bool) {
 	s.mu.Unlock()
 	if s.events != nil && s.events.onUnsubscribe != nil {
 		handler := s.events.onUnsubscribe
-		handler.OnUnsubscribe(s, UnsubscribeContext{})
+		handler.OnUnsubscribe(s, UnsubscribeEvent{})
 	}
 }
 
@@ -259,7 +274,7 @@ func (s *Sub) subscribeSuccess(recovered bool) {
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeSuccess != nil {
 		handler := s.events.onSubscribeSuccess
-		handler.OnSubscribeSuccess(s, SubscribeSuccessContext{Resubscribed: resubscribed, Recovered: recovered})
+		handler.OnSubscribeSuccess(s, SubscribeSuccessEvent{Resubscribed: resubscribed, Recovered: recovered})
 	}
 	s.mu.Lock()
 	s.resubscribed = true
@@ -278,21 +293,21 @@ func (s *Sub) subscribeError(err error) {
 	s.mu.Unlock()
 	if s.events != nil && s.events.onSubscribeError != nil {
 		handler := s.events.onSubscribeError
-		handler.OnSubscribeError(s, SubscribeErrorContext{Error: err.Error()})
+		handler.OnSubscribeError(s, SubscribeErrorEvent{Error: err.Error()})
 	}
 }
 
-func (s *Sub) handlePub(m proto.Pub) {
-	var handler MessageHandler
-	if s.events != nil && s.events.onMessage != nil {
-		handler = s.events.onMessage
+func (s *Sub) handlePub(pub Publication) {
+	var handler PublicationHandler
+	if s.events != nil && s.events.onPublication != nil {
+		handler = s.events.onPublication
 	}
-	mid := m.UID
+	mid := pub.UID
 	s.lastMessageMu.Lock()
 	s.lastMessageID = &mid
 	s.lastMessageMu.Unlock()
 	if handler != nil {
-		handler.OnMessage(s, m)
+		handler.OnPublication(s, PublicationEvent{Publication: pub})
 	}
 }
 
@@ -302,7 +317,7 @@ func (s *Sub) handleJoin(info proto.ClientInfo) {
 		handler = s.events.onJoin
 	}
 	if handler != nil {
-		handler.OnJoin(s, info)
+		handler.OnJoin(s, JoinEvent{ClientInfo: info})
 	}
 }
 
@@ -312,7 +327,7 @@ func (s *Sub) handleLeave(info proto.ClientInfo) {
 		handler = s.events.onLeave
 	}
 	if handler != nil {
-		handler.OnLeave(s, info)
+		handler.OnLeave(s, LeaveEvent{ClientInfo: info})
 	}
 }
 
@@ -357,13 +372,16 @@ func (s *Sub) resubscribe() error {
 	s.lastMessageMu.Unlock()
 	res, err := s.centrifuge.sendSubscribe(s.channel, msgID, privateSign)
 	if err != nil {
+		if err == ErrTimeout {
+			return err
+		}
 		s.subscribeError(err)
-		return err
+		return nil
 	}
 
-	if len(res.Pubs) > 0 {
-		for i := len(res.Pubs) - 1; i >= 0; i-- {
-			s.handlePub(*res.Pubs[i])
+	if len(res.Publications) > 0 {
+		for i := len(res.Publications) - 1; i >= 0; i-- {
+			s.handlePub(*res.Publications[i])
 		}
 	} else {
 		lastID := string(res.Last)
@@ -373,6 +391,5 @@ func (s *Sub) resubscribe() error {
 	}
 
 	s.subscribeSuccess(res.Recovered)
-
 	return nil
 }

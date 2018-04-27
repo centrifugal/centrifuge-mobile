@@ -99,30 +99,40 @@ func newPrivateRequest(client string, channel string) *PrivateRequest {
 	}
 }
 
-// ConnectContext is a connect event context passed to OnConnect callback.
-type ConnectContext struct {
+// ConnectEvent is a connect event context passed to OnConnect callback.
+type ConnectEvent struct {
 	ClientID string
 }
 
-// DisconnectContext is a disconnect event context passed to OnDisconnect callback.
-type DisconnectContext struct {
+// DisconnectEvent is a disconnect event context passed to OnDisconnect callback.
+type DisconnectEvent struct {
 	Reason    string
 	Reconnect bool
 }
 
-// ErrorContext is an error event context passed to OnError callback.
-type ErrorContext struct {
+// ErrorEvent is an error event context passed to OnError callback.
+type ErrorEvent struct {
 	Message string
+}
+
+// MessageEvent is an event for async message from server to client.
+type MessageEvent struct {
+	Data Raw
 }
 
 // ConnectHandler is an interface describing how to handle connect event.
 type ConnectHandler interface {
-	OnConnect(*Client, *ConnectContext)
+	OnConnect(*Client, ConnectEvent)
 }
 
 // DisconnectHandler is an interface describing how to handle disconnect event.
 type DisconnectHandler interface {
-	OnDisconnect(*Client, *DisconnectContext)
+	OnDisconnect(*Client, DisconnectEvent)
+}
+
+// MessageHandler is an interface describing how to async message from server.
+type MessageHandler interface {
+	OnMessage(*Client, *MessageEvent)
 }
 
 // PrivateSubHandler is an interface describing how to handle private subscription request.
@@ -130,14 +140,14 @@ type PrivateSubHandler interface {
 	OnPrivateSub(*Client, *PrivateRequest) (*PrivateSign, error)
 }
 
-// RefreshHandler is an interface describing how to connection credentials refresh event.
+// RefreshHandler is an interface describing how to handle credentials refresh event.
 type RefreshHandler interface {
 	OnRefresh(*Client) (*Credentials, error)
 }
 
 // ErrorHandler is an interface describing how to handle error event.
 type ErrorHandler interface {
-	OnError(*Client, *ErrorContext)
+	OnError(*Client, ErrorEvent)
 }
 
 // EventHandler has all event handlers for client.
@@ -147,6 +157,7 @@ type EventHandler struct {
 	onPrivateSub PrivateSubHandler
 	onRefresh    RefreshHandler
 	onError      ErrorHandler
+	onMessage    MessageHandler
 }
 
 // NewEventHandler initializes new EventHandler.
@@ -174,12 +185,17 @@ func (h *EventHandler) OnRefresh(handler RefreshHandler) {
 	h.onRefresh = handler
 }
 
-// OnError is a function to handle critical protocol errors manually.
+// OnError is a function that will receive unhandled errors for logging.
 func (h *EventHandler) OnError(handler ErrorHandler) {
 	h.onError = handler
 }
 
-// Describe client connection state.
+// OnMessage allows to process async message from server to client.
+func (h *EventHandler) OnMessage(handler MessageHandler) {
+	h.onMessage = handler
+}
+
+// Describe client connection statuses.
 const (
 	DISCONNECTED = iota
 	CONNECTING
@@ -212,8 +228,8 @@ type Client struct {
 	paramsEncoder     proto.ParamsEncoder
 	resultDecoder     proto.ResultDecoder
 	commandEncoder    proto.CommandEncoder
-	messageEncoder    proto.MessageEncoder
-	messageDecoder    proto.MessageDecoder
+	pushEncoder       proto.PushEncoder
+	pushDecoder       proto.PushDecoder
 }
 
 func (c *Client) nextMsgID() int32 {
@@ -250,8 +266,8 @@ func New(u string, events *EventHandler, config *Config) *Client {
 		paramsEncoder:     proto.GetParamsEncoder(encoding),
 		resultDecoder:     proto.GetResultDecoder(encoding),
 		commandEncoder:    proto.GetCommandEncoder(encoding),
-		messageEncoder:    proto.GetMessageEncoder(encoding),
-		messageDecoder:    proto.GetMessageDecoder(encoding),
+		pushEncoder:       proto.GetPushEncoder(encoding),
+		pushDecoder:       proto.GetPushDecoder(encoding),
 	}
 	return c
 }
@@ -285,8 +301,55 @@ func (c *Client) handleError(err error) {
 		handler = c.events.onError
 	}
 	if handler != nil {
-		handler.OnError(c, &ErrorContext{Message: err.Error()})
+		handler.OnError(c, ErrorEvent{Message: err.Error()})
 	}
+}
+
+// Send data to server asynchronously.
+func (c *Client) Send(data []byte) error {
+	cmd := &proto.Command{
+		Method: proto.MethodTypeSend,
+	}
+	params := &proto.SendRequest{
+		Data: data,
+	}
+	paramsData, err := c.paramsEncoder.Encode(params)
+	if err != nil {
+		return err
+	}
+	cmd.Params = paramsData
+	return c.send(cmd)
+}
+
+// RPC allows to make RPC – send data to server ant wait for response.
+// RPC handler must be registered on server.
+func (c *Client) RPC(data []byte) ([]byte, error) {
+	cmd := &proto.Command{
+		Method: proto.MethodTypeRPC,
+	}
+	params := proto.RPCRequest{
+		Data: data,
+	}
+	paramsData, err := c.paramsEncoder.Encode(params)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Params = paramsData
+	r, err := c.sendSync(cmd.ID, cmd, c.timeout())
+	if err != nil {
+		return nil, err
+	}
+	if r.Error != nil {
+		return nil, r.Error
+	}
+
+	var res proto.RPCResult
+	err = c.resultDecoder.Decode(r.Result, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.Data, nil
 }
 
 // Close closes Client connection and cleans ups everything.
@@ -323,15 +386,16 @@ func (c *Client) handleDisconnect(d *disconnect) {
 	}
 
 	c.mutex.Lock()
-	c.reconnect = d.Reconnect
-
 	if c.status == DISCONNECTED || c.status == CLOSED {
-		if c.transport != nil {
-			c.transport.Close()
-			c.transport = nil
-		}
 		c.mutex.Unlock()
 		return
+	}
+
+	c.reconnect = d.Reconnect
+
+	if c.transport != nil {
+		c.transport.Close()
+		c.transport = nil
 	}
 
 	c.waitersMutex.Lock()
@@ -368,8 +432,7 @@ func (c *Client) handleDisconnect(d *disconnect) {
 	}
 
 	if handler != nil {
-		ctx := &DisconnectContext{Reason: d.Reason, Reconnect: reconnect}
-		handler.OnDisconnect(c, ctx)
+		handler.OnDisconnect(c, DisconnectEvent{Reason: d.Reason, Reconnect: reconnect})
 	}
 
 	if !reconnect {
@@ -514,13 +577,12 @@ func (c *Client) handle(reply *proto.Reply) error {
 		}
 		c.waitersMutex.RUnlock()
 	} else {
-		messageDecoder := proto.GetMessageDecoder(c.encoding)
-		message, err := messageDecoder.Decode(reply.Result)
+		push, err := c.pushDecoder.Decode(reply.Result)
 		if err != nil {
 			c.handleError(err)
 			return err
 		}
-		err = c.handleMessage(*message)
+		err = c.handlePush(*push)
 		if err != nil {
 			c.handleError(err)
 		}
@@ -529,22 +591,31 @@ func (c *Client) handle(reply *proto.Reply) error {
 	return nil
 }
 
-func (c *Client) handlePush(msg proto.Push) error {
+func (c *Client) handleMessage(msg proto.Message) error {
+
+	var handler MessageHandler
+	if c.events != nil && c.events.onMessage != nil {
+		handler = c.events.onMessage
+	}
+
+	if handler != nil {
+		ctx := &MessageEvent{Data: msg.Data}
+		handler.OnMessage(c, ctx)
+	}
+
 	return nil
 }
 
-func (c *Client) handleMessage(msg proto.Message) error {
-	messageDecoder := proto.GetMessageDecoder(c.encoding)
-
+func (c *Client) handlePush(msg proto.Push) error {
 	switch msg.Type {
-	case proto.MessageTypePush:
-		m, err := messageDecoder.DecodePush(msg.Data)
+	case proto.PushTypeMessage:
+		m, err := c.pushDecoder.DecodeMessage(msg.Data)
 		if err != nil {
 			return err
 		}
-		c.handlePush(*m)
-	case proto.MessageTypeUnsub:
-		m, err := messageDecoder.DecodeUnsub(msg.Data)
+		c.handleMessage(*m)
+	case proto.PushTypeUnsub:
+		m, err := c.pushDecoder.DecodeUnsub(msg.Data)
 		if err != nil {
 			return err
 		}
@@ -556,8 +627,8 @@ func (c *Client) handleMessage(msg proto.Message) error {
 			return nil
 		}
 		sub.handleUnsub(*m)
-	case proto.MessageTypePub:
-		m, err := messageDecoder.DecodePub(msg.Data)
+	case proto.PushTypePublication:
+		m, err := c.pushDecoder.DecodePublication(msg.Data)
 		if err != nil {
 			return err
 		}
@@ -569,8 +640,8 @@ func (c *Client) handleMessage(msg proto.Message) error {
 			return nil
 		}
 		sub.handlePub(*m)
-	case proto.MessageTypeJoin:
-		m, err := messageDecoder.DecodeJoin(msg.Data)
+	case proto.PushTypeJoin:
+		m, err := c.pushDecoder.DecodeJoin(msg.Data)
 		if err != nil {
 			return nil
 		}
@@ -582,8 +653,8 @@ func (c *Client) handleMessage(msg proto.Message) error {
 			return nil
 		}
 		sub.handleJoin(m.Info)
-	case proto.MessageTypeLeave:
-		m, err := messageDecoder.DecodeLeave(msg.Data)
+	case proto.PushTypeLeave:
+		m, err := c.pushDecoder.DecodeLeave(msg.Data)
 		if err != nil {
 			return nil
 		}
@@ -731,8 +802,7 @@ func (c *Client) connect() error {
 
 	if c.events != nil && c.events.onConnect != nil && prevStatus != CONNECTED {
 		handler := c.events.onConnect
-		ctx := &ConnectContext{ClientID: c.clientID()}
-		handler.OnConnect(c, ctx)
+		handler.OnConnect(c, ConnectEvent{ClientID: c.clientID()})
 	}
 
 	return nil
@@ -802,7 +872,7 @@ func (c *Client) sendRefresh() error {
 		ID:     uint32(c.nextMsgID()),
 		Method: proto.MethodTypeRefresh,
 	}
-	params := proto.RefreshRequest{
+	params := &proto.RefreshRequest{
 		User: c.credentials.User,
 		Exp:  c.credentials.Exp,
 		Info: c.credentials.Info,
@@ -853,7 +923,7 @@ func (c *Client) sendConnect() (proto.ConnectResult, error) {
 
 	c.mutex.RLock()
 	if c.credentials != nil {
-		params := proto.ConnectRequest{
+		params := &proto.ConnectRequest{
 			User: c.credentials.User,
 			Exp:  c.credentials.Exp,
 			Info: c.credentials.Info,
@@ -962,9 +1032,9 @@ func (c *Client) subscribe(sub *Sub) error {
 		return err
 	}
 
-	if len(res.Pubs) > 0 {
-		for i := len(res.Pubs) - 1; i >= 0; i-- {
-			sub.handlePub(*res.Pubs[i])
+	if len(res.Publications) > 0 {
+		for i := len(res.Publications) - 1; i >= 0; i-- {
+			sub.handlePub(*res.Publications[i])
 		}
 	} else {
 		lastID := string(res.Last)
@@ -1051,20 +1121,20 @@ func (c *Client) sendPublish(channel string, data []byte) (proto.PublishResult, 
 	return res, nil
 }
 
-func (c *Client) history(channel string) ([]proto.Pub, error) {
+func (c *Client) history(channel string) ([]proto.Publication, error) {
 	res, err := c.sendHistory(channel)
 	if err != nil {
-		return []proto.Pub{}, err
+		return []proto.Publication{}, err
 	}
-	pubs := make([]proto.Pub, len(res.Pubs))
-	for i, m := range res.Pubs {
+	pubs := make([]proto.Publication, len(res.Publications))
+	for i, m := range res.Publications {
 		pubs[i] = *m
 	}
 	return pubs, nil
 }
 
 func (c *Client) sendHistory(channel string) (proto.HistoryResult, error) {
-	params := proto.HistoryRequest{
+	params := &proto.HistoryRequest{
 		Channel: channel,
 	}
 
@@ -1106,7 +1176,7 @@ func (c *Client) presence(channel string) (map[string]proto.ClientInfo, error) {
 }
 
 func (c *Client) sendPresence(channel string) (proto.PresenceResult, error) {
-	params := proto.PresenceRequest{
+	params := &proto.PresenceRequest{
 		Channel: channel,
 	}
 
@@ -1147,7 +1217,7 @@ func (c *Client) unsubscribe(channel string) error {
 }
 
 func (c *Client) sendUnsubscribe(channel string) (proto.UnsubscribeResult, error) {
-	params := proto.PresenceRequest{
+	params := &proto.UnsubscribeRequest{
 		Channel: channel,
 	}
 

@@ -48,8 +48,8 @@ func (h *eventHandler) OnRefresh(c *centrifuge.Client) (*centrifuge.Credentials,
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, pub centrifuge.Pub) {
-	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
+func (h *subEventHandler) OnPublication(sub *centrifuge.Sub, e centrifuge.PublicationEvent) {
+	log.Println(fmt.Sprintf("New message received in channel %s: %s", sub.Channel(), string(e.Data)))
 }
 
 func newConnection() *centrifuge.Client {
@@ -71,7 +71,7 @@ func newConnection() *centrifuge.Client {
 	}
 
 	subEvents := centrifuge.NewSubEventHandler()
-	subEvents.OnMessage(&subEventHandler{})
+	subEvents.OnPublication(&subEventHandler{})
 
 	_, err = c.Subscribe("public:chat", subEvents)
 	if err != nil {

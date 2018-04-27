@@ -12,32 +12,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// closeErr tries to extract connection close code and reason from error.
-// It returns true as first return value in case of successful extraction.
-func closeErr(err error) (bool, int, string) {
-	if closeErr, ok := err.(*websocket.CloseError); ok {
-		return true, closeErr.Code, closeErr.Text
-	}
-	return false, 0, ""
-}
-
 func extractDisconnectWebsocket(err error) *disconnect {
-	d := &disconnect{
-		Reason:    "connection closed",
-		Reconnect: true,
-	}
 	if err != nil {
-		ok, _, reason := closeErr(err)
-		if ok {
-			var disconnectAdvice disconnect
-			err := json.Unmarshal([]byte(reason), &disconnectAdvice)
+		if closeErr, ok := err.(*websocket.CloseError); ok {
+			var disconnect disconnect
+			err := json.Unmarshal([]byte(closeErr.Text), &disconnect)
 			if err == nil {
-				d.Reason = disconnectAdvice.Reason
-				d.Reconnect = disconnectAdvice.Reconnect
+				return &disconnect
 			}
 		}
 	}
-	return d
+	return nil
 }
 
 type websocketTransport struct {
@@ -49,6 +34,7 @@ type websocketTransport struct {
 	config         websocketTransportConfig
 	disconnect     *disconnect
 	closed         bool
+	closeCh        chan struct{}
 }
 
 type websocketTransportConfig struct {
@@ -73,8 +59,9 @@ func newWebsocketTransport(url string, config websocketTransportConfig) (transpo
 
 	t := &websocketTransport{
 		conn:    conn,
-		replyCh: make(chan *proto.Reply, 64),
+		replyCh: make(chan *proto.Reply, 128),
 		config:  config,
+		closeCh: make(chan struct{}),
 	}
 	go t.reader()
 	return t, nil
@@ -87,12 +74,13 @@ func (t *websocketTransport) Close() error {
 		return nil
 	}
 	t.closed = true
-	close(t.replyCh)
+	close(t.closeCh)
 	return t.conn.Close()
 }
 
 func (t *websocketTransport) reader() {
 	defer t.Close()
+	defer close(t.replyCh)
 
 	for {
 		_, data, err := t.conn.ReadMessage()
@@ -113,9 +101,12 @@ func (t *websocketTransport) reader() {
 					return
 				}
 				select {
+				case <-t.closeCh:
+					return
 				case t.replyCh <- reply:
 				default:
-					// Can't keep up with message stream from server.
+					// Can't keep up with server message rate.
+					t.disconnect = &disconnect{Reason: "client slow", Reconnect: true}
 					return
 				}
 			}

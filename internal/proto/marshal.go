@@ -51,91 +51,91 @@ func (e *ProtobufCommandEncoder) Encode(cmd *Command) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// MessageEncoder ...
-type MessageEncoder interface {
-	Encode(*Message) ([]byte, error)
-	EncodePush(*Push) ([]byte, error)
-	EncodePub(*Pub) ([]byte, error)
+// PushEncoder ...
+type PushEncoder interface {
+	Encode(*Push) ([]byte, error)
+	EncodeMessage(*Message) ([]byte, error)
+	EncodePublication(*Publication) ([]byte, error)
 	EncodeJoin(*Join) ([]byte, error)
 	EncodeLeave(*Leave) ([]byte, error)
 	EncodeUnsub(*Unsub) ([]byte, error)
 }
 
-// JSONMessageEncoder ...
-type JSONMessageEncoder struct {
+// JSONPushEncoder ...
+type JSONPushEncoder struct {
 }
 
-// NewJSONMessageEncoder ...
-func NewJSONMessageEncoder() *JSONMessageEncoder {
-	return &JSONMessageEncoder{}
+// NewJSONPushEncoder ...
+func NewJSONPushEncoder() *JSONPushEncoder {
+	return &JSONPushEncoder{}
 }
 
 // Encode ...
-func (e *JSONMessageEncoder) Encode(message *Message) ([]byte, error) {
+func (e *JSONPushEncoder) Encode(message *Push) ([]byte, error) {
 	return json.Marshal(message)
 }
 
-// EncodePub ...
-func (e *JSONMessageEncoder) EncodePub(message *Pub) ([]byte, error) {
+// EncodePublication ...
+func (e *JSONPushEncoder) EncodePublication(message *Publication) ([]byte, error) {
 	return json.Marshal(message)
 }
 
-// EncodePush ...
-func (e *JSONMessageEncoder) EncodePush(message *Push) ([]byte, error) {
+// EncodeMessage ...
+func (e *JSONPushEncoder) EncodeMessage(message *Message) ([]byte, error) {
 	return json.Marshal(message)
 }
 
 // EncodeJoin ...
-func (e *JSONMessageEncoder) EncodeJoin(message *Join) ([]byte, error) {
+func (e *JSONPushEncoder) EncodeJoin(message *Join) ([]byte, error) {
 	return json.Marshal(message)
 }
 
 // EncodeLeave ...
-func (e *JSONMessageEncoder) EncodeLeave(message *Leave) ([]byte, error) {
+func (e *JSONPushEncoder) EncodeLeave(message *Leave) ([]byte, error) {
 	return json.Marshal(message)
 }
 
 // EncodeUnsub ...
-func (e *JSONMessageEncoder) EncodeUnsub(message *Unsub) ([]byte, error) {
+func (e *JSONPushEncoder) EncodeUnsub(message *Unsub) ([]byte, error) {
 	return json.Marshal(message)
 }
 
-// ProtobufMessageEncoder ...
-type ProtobufMessageEncoder struct {
+// ProtobufPushEncoder ...
+type ProtobufPushEncoder struct {
 }
 
-// NewProtobufMessageEncoder ...
-func NewProtobufMessageEncoder() *ProtobufMessageEncoder {
-	return &ProtobufMessageEncoder{}
+// NewProtobufPushEncoder ...
+func NewProtobufPushEncoder() *ProtobufPushEncoder {
+	return &ProtobufPushEncoder{}
 }
 
 // Encode ...
-func (e *ProtobufMessageEncoder) Encode(message *Message) ([]byte, error) {
+func (e *ProtobufPushEncoder) Encode(message *Push) ([]byte, error) {
 	return message.Marshal()
 }
 
-// EncodePub ...
-func (e *ProtobufMessageEncoder) EncodePub(message *Pub) ([]byte, error) {
+// EncodePublication ...
+func (e *ProtobufPushEncoder) EncodePublication(message *Publication) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodePush ...
-func (e *ProtobufMessageEncoder) EncodePush(message *Push) ([]byte, error) {
+func (e *ProtobufPushEncoder) EncodeMessage(message *Message) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodeJoin ...
-func (e *ProtobufMessageEncoder) EncodeJoin(message *Join) ([]byte, error) {
+func (e *ProtobufPushEncoder) EncodeJoin(message *Join) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodeLeave ...
-func (e *ProtobufMessageEncoder) EncodeLeave(message *Leave) ([]byte, error) {
+func (e *ProtobufPushEncoder) EncodeLeave(message *Leave) ([]byte, error) {
 	return message.Marshal()
 }
 
 // EncodeUnsub ...
-func (e *ProtobufMessageEncoder) EncodeUnsub(message *Unsub) ([]byte, error) {
+func (e *ProtobufPushEncoder) EncodeUnsub(message *Unsub) ([]byte, error) {
 	return message.Marshal()
 }
 
@@ -246,6 +246,7 @@ func NewProtobufParamsEncoder() *ProtobufParamsEncoder {
 func (d *ProtobufParamsEncoder) Encode(r interface{}) ([]byte, error) {
 	m, ok := r.(proto.Marshaler)
 	if !ok {
+		fmt.Printf("%#v\n", r)
 		return nil, fmt.Errorf("can not marshal type to Protobuf")
 	}
 	return m.Marshal()
