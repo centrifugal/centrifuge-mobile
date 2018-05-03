@@ -19,28 +19,28 @@ type ClientInfo struct {
 	ChanInfo []byte
 }
 
-// Sub describes client subscription to channel.
-type Sub struct {
-	sub *gocentrifuge.Sub
+// Subscription describes client subscription to channel.
+type Subscription struct {
+	sub *gocentrifuge.Subscription
 }
 
 // Channel returns subscription channel.
-func (s *Sub) Channel() string {
+func (s *Subscription) Channel() string {
 	return s.sub.Channel()
 }
 
 // Publish allows to publish JSON encoded data to subscription channel.
-func (s *Sub) Publish(data []byte) error {
+func (s *Subscription) Publish(data []byte) error {
 	return s.sub.Publish(data)
 }
 
 // Unsubscribe allows to unsubscribe from channel.
-func (s *Sub) Unsubscribe() error {
+func (s *Subscription) Unsubscribe() error {
 	return s.sub.Unsubscribe()
 }
 
 // Subscribe allows to subscribe again after unsubscribing.
-func (s *Sub) Subscribe() error {
+func (s *Subscription) Subscribe() error {
 	return s.sub.Subscribe()
 }
 
@@ -72,7 +72,7 @@ func (d *HistoryData) ItemAt(i int) *Publication {
 }
 
 // History allows to extract channel history.
-func (s *Sub) History() (*HistoryData, error) {
+func (s *Subscription) History() (*HistoryData, error) {
 	publications, err := s.sub.History()
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func (d *PresenceData) ItemAt(i int) *ClientInfo {
 }
 
 // Presence allows to extract presence information for channel.
-func (s *Sub) Presence() (*PresenceData, error) {
+func (s *Subscription) Presence() (*PresenceData, error) {
 	presence, err := s.sub.Presence()
 	if err != nil {
 		return nil, err

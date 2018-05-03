@@ -2,8 +2,8 @@ package centrifuge
 
 import "testing"
 
-func TestEventHandler(t *testing.T) {
-	eh := NewEventHandler()
+func TestEventHub(t *testing.T) {
+	eh := NewEventHub()
 	if eh == nil {
 		t.Fatalf("nil EventHandler")
 	}
@@ -16,7 +16,7 @@ func (h *testConnectHandler) OnConnect(c *Client, e *ConnectEvent) {
 }
 
 func TestEventProxy(t *testing.T) {
-	eh := NewEventHandler()
+	eh := NewEventHub()
 	if eh == nil {
 		t.Fatalf("nil EventHandler")
 	}

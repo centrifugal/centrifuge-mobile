@@ -56,14 +56,14 @@ func DefaultConfig() *Config {
 }
 
 // New initializes Client.
-func New(u string, events *EventHandler, config *Config) *Client {
+func New(u string, events *EventHub, config *Config) *Client {
 	c := gocentrifuge.Config{
 		ReadTimeout:  time.Duration(config.ReadTimeoutMilliseconds) * time.Millisecond,
 		WriteTimeout: time.Duration(config.WriteTimeoutMilliseconds) * time.Millisecond,
 		PingInterval: time.Duration(config.PingIntervalMilliseconds) * time.Millisecond,
 	}
 	client := &Client{
-		client: gocentrifuge.New(u, events.eventHandler, c),
+		client: gocentrifuge.New(u, events.eventHub, c),
 	}
 	events.setClient(client)
 	return client
@@ -112,20 +112,20 @@ func (c *Client) Disconnect() error {
 }
 
 // Subscribe allows to subscribe on channel.
-func (c *Client) Subscribe(channel string, events *SubEventHandler) *Sub {
-	sub := c.client.Subscribe(channel, events.subEventHandler)
-	return &Sub{
+func (c *Client) Subscribe(channel string, events *SubscriptionEventHub) *Subscription {
+	sub := c.client.Subscribe(channel, events.subEventHub)
+	return &Subscription{
 		sub: sub,
 	}
 }
 
 // SubscribeSync allows to subscribe on channel and wait until subscribe success or error.
-func (c *Client) SubscribeSync(channel string, events *SubEventHandler) (*Sub, error) {
-	sub, err := c.client.SubscribeSync(channel, events.subEventHandler)
+func (c *Client) SubscribeSync(channel string, events *SubscriptionEventHub) (*Subscription, error) {
+	sub, err := c.client.SubscribeSync(channel, events.subEventHub)
 	if err != nil {
 		return nil, err
 	}
-	return &Sub{
+	return &Subscription{
 		sub: sub,
 	}, nil
 }
