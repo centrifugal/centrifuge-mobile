@@ -49,12 +49,12 @@ type HistoryData struct {
 	publications []gocentrifuge.Publication
 }
 
-// NumItems ...
+// NumItems to get total number of Publication items in collection.
 func (d *HistoryData) NumItems() int {
 	return len(d.publications)
 }
 
-// ItemAt ...
+// ItemAt to get Publication by index.
 func (d *HistoryData) ItemAt(i int) *Publication {
 	pub := d.publications[i]
 	var info *ClientInfo
@@ -82,17 +82,17 @@ func (s *Subscription) History() (*HistoryData, error) {
 	}, nil
 }
 
-// PresenceData ...
+// PresenceData contains presence information for channel.
 type PresenceData struct {
 	clients []gocentrifuge.ClientInfo
 }
 
-// NumItems ...
+// NumItems to get total number of ClientInfo items in collection.
 func (d *PresenceData) NumItems() int {
 	return len(d.clients)
 }
 
-// ItemAt ...
+// ItemAt to get ClientInfo by index.
 func (d *PresenceData) ItemAt(i int) *ClientInfo {
 	info := d.clients[i]
 	return &ClientInfo{
