@@ -4,80 +4,106 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
-type TestMessage struct {
+// // In production you need to receive credentials from application backend.
+// func credentials() *centrifuge.Credentials {
+// 	// Never show secret to client of your application. Keep it on your application backend only.
+// 	secret := "secret"
+// 	// Application user ID.
+// 	user := "42"
+// 	// Exp as string.
+// 	exp := centrifuge.Exp(60)
+// 	// Empty info.
+// 	info := ""
+// 	// Generate sign so Centrifugo server can trust connection parameters received from client.
+// 	sign := centrifuge.GenerateClientSign(secret, user, exp, info)
+
+// 	return &centrifuge.Credentials{
+// 		User: user,
+// 		Exp:  exp,
+// 		Info: info,
+// 		Sign: sign,
+// 	}
+// }
+
+type testMessage struct {
 	Input string `json:"input"`
+}
+
+type eventHandler struct{}
+
+func (h *eventHandler) OnConnect(c *centrifuge.Client, e *centrifuge.ConnectEvent) {
+	log.Printf("Connected to chat with ID %s", e.ClientID)
+}
+
+func (h *eventHandler) OnError(c *centrifuge.Client, e *centrifuge.ErrorEvent) {
+	log.Printf("Error: %s", e.Message)
+}
+
+func (h *eventHandler) OnDisconnect(c *centrifuge.Client, e *centrifuge.DisconnectEvent) {
+	log.Printf("Disconnected from chat: %s", e.Reason)
 }
 
 type subEventHandler struct{}
 
-func (h *subEventHandler) OnMessage(sub *centrifuge.Sub, msg *centrifuge.Message) {
-	log.Println(fmt.Sprintf("New message received in channel %s: %#v", sub.Channel(), msg))
+func (h *subEventHandler) OnPublish(sub *centrifuge.Subscription, e *centrifuge.PublishEvent) {
+	log.Printf("New message received in channel %s: %#v", sub.Channel(), e.Data)
 }
 
-func (h *subEventHandler) OnJoin(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) {
-	log.Println(fmt.Sprintf("User %s (client ID %s) joined channel %s", msg.User, msg.Client, sub.Channel()))
+func (h *subEventHandler) OnJoin(sub *centrifuge.Subscription, e *centrifuge.JoinEvent) {
+	log.Printf("User %s (client ID %s) joined channel %s", e.User, e.Client, sub.Channel())
 }
 
-func (h *subEventHandler) OnLeave(sub *centrifuge.Sub, msg *centrifuge.ClientInfo) {
-	log.Println(fmt.Sprintf("User %s (client ID %s) left channel %s", msg.User, msg.Client, sub.Channel()))
+func (h *subEventHandler) OnLeave(sub *centrifuge.Subscription, e *centrifuge.LeaveEvent) {
+	log.Printf("User %s (client ID %s) left channel %s", e.User, e.Client, sub.Channel())
 }
 
-// In production you need to receive credentials from application backend.
-func credentials() *centrifuge.Credentials {
-	// Never show secret to client of your application. Keep it on your application backend only.
-	secret := "secret"
-	// Application user ID.
-	user := "42"
-	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
-	// Empty info.
-	info := ""
-	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+func (h *subEventHandler) OnSubscribeSuccess(sub *centrifuge.Subscription, e *centrifuge.SubscribeSuccessEvent) {
+	log.Printf("Successfully subscribed on channel %s", sub.Channel())
+}
 
-	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
-	}
+func (h *subEventHandler) OnSubscribeError(sub *centrifuge.Subscription, e *centrifuge.SubscribeErrorEvent) {
+	log.Printf("Error subscribing on channel %s: %v", sub.Channel(), e.Error)
 }
 
 func main() {
 	// In production you need to receive credentials from application backend.
-	creds := credentials()
+	// creds := credentials()
 
 	started := time.Now()
 
 	wsURL := "ws://localhost:8000/connection/websocket"
-	c := centrifuge.New(wsURL, creds, nil, centrifuge.DefaultConfig())
-	defer c.Close()
+	events := centrifuge.NewEventHub()
+	eventHandler := &eventHandler{}
+	events.OnConnect(eventHandler)
+	events.OnDisconnect(eventHandler)
+	events.OnError(eventHandler)
+	c := centrifuge.New(wsURL, events, centrifuge.DefaultConfig())
 
 	err := c.Connect()
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	events := centrifuge.NewSubEventHandler()
+	subEvents := centrifuge.NewSubscriptionEventHub()
 	subEventHandler := &subEventHandler{}
-	events.OnMessage(subEventHandler)
-	events.OnJoin(subEventHandler)
-	events.OnLeave(subEventHandler)
+	subEvents.OnPublish(subEventHandler)
+	subEvents.OnJoin(subEventHandler)
+	subEvents.OnLeave(subEventHandler)
+	subEvents.OnSubscribeSuccess(subEventHandler)
+	subEvents.OnSubscribeError(subEventHandler)
 
-	sub, err := c.Subscribe("public:chat", events)
+	sub, err := c.Subscribe("index", subEvents)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	data := TestMessage{Input: "example input"}
+	data := testMessage{Input: "example input"}
 	dataBytes, _ := json.Marshal(data)
 	err = sub.Publish(dataBytes)
 	if err != nil {
@@ -88,13 +114,13 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Printf("%d messages in channel %s history", len(history), sub.Channel())
+	log.Printf("%d messages in channel %s history", history.NumItems(), sub.Channel())
 
 	presence, err := sub.Presence()
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Printf("%d clients in channel %s", len(presence), sub.Channel())
+	log.Printf("%d clients in channel %s", presence.NumItems(), sub.Channel())
 
 	err = sub.Unsubscribe()
 	if err != nil {

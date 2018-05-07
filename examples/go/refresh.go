@@ -1,14 +1,12 @@
 package main
 
-// Demonstrate how to resque from credentials expiration
-// (when connection_lifetime set in Centrifugo).
+// Demonstrate how to resque from connection expiration.
 
 import (
 	"fmt"
 	"log"
 
 	"github.com/centrifugal/centrifuge-mobile"
-	"github.com/centrifugal/centrifugo/libcentrifugo/auth"
 )
 
 // In production you need to receive credentials from application backend.
@@ -17,18 +15,18 @@ func credentials() *centrifuge.Credentials {
 	secret := "secret"
 	// Application user ID.
 	user := "42"
-	// Current timestamp as string.
-	timestamp := centrifuge.Timestamp()
+	// Exp as string.
+	exp := centrifuge.Exp(60)
 	// Empty info.
 	info := ""
-	// Generate client token so Centrifugo server can trust connection parameters received from client.
-	token := auth.GenerateClientToken(secret, user, timestamp, info)
+	// Generate sign so Centrifugo server can trust connection parameters received from client.
+	sign := centrifuge.GenerateClientSign(secret, user, exp, info)
 
 	return &centrifuge.Credentials{
-		User:      user,
-		Timestamp: timestamp,
-		Info:      info,
-		Token:     token,
+		User: user,
+		Exp:  exp,
+		Info: info,
+		Sign: sign,
 	}
 }
 

@@ -1,5 +1,4 @@
 .DS_Store
-BUILDS/
 
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
@@ -29,3 +28,4 @@ _testmain.go
 Centrifuge.framework/
 centrifuge-sources.jar
 centrifuge.aar
+BUILDS/

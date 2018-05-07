@@ -58,9 +58,10 @@ func DefaultConfig() *Config {
 // New initializes Client.
 func New(u string, events *EventHub, config *Config) *Client {
 	c := gocentrifuge.Config{
-		ReadTimeout:  time.Duration(config.ReadTimeoutMilliseconds) * time.Millisecond,
-		WriteTimeout: time.Duration(config.WriteTimeoutMilliseconds) * time.Millisecond,
-		PingInterval: time.Duration(config.PingIntervalMilliseconds) * time.Millisecond,
+		ReadTimeout:          time.Duration(config.ReadTimeoutMilliseconds) * time.Millisecond,
+		WriteTimeout:         time.Duration(config.WriteTimeoutMilliseconds) * time.Millisecond,
+		PingInterval:         time.Duration(config.PingIntervalMilliseconds) * time.Millisecond,
+		PrivateChannelPrefix: config.PrivateChannelPrefix,
 	}
 	client := &Client{
 		client: gocentrifuge.New(u, events.eventHub, c),
@@ -112,11 +113,14 @@ func (c *Client) Disconnect() error {
 }
 
 // Subscribe allows to subscribe on channel.
-func (c *Client) Subscribe(channel string, events *SubscriptionEventHub) *Subscription {
-	sub := c.client.Subscribe(channel, events.subEventHub)
+func (c *Client) Subscribe(channel string, events *SubscriptionEventHub) (*Subscription, error) {
+	sub, err := c.client.Subscribe(channel, events.subEventHub)
+	if err != nil {
+		return nil, err
+	}
 	return &Subscription{
 		sub: sub,
-	}
+	}, nil
 }
 
 // SubscribeSync allows to subscribe on channel and wait until subscribe success or error.
