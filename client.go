@@ -11,24 +11,6 @@ type Client struct {
 	client *gocentrifuge.Client
 }
 
-// Credentials describe client connection parameters.
-type Credentials struct {
-	User string
-	Exp  string
-	Info string
-	Sign string
-}
-
-// NewCredentials initializes Credentials.
-func NewCredentials(user, exp, info, sign string) *Credentials {
-	return &Credentials{
-		User: user,
-		Exp:  exp,
-		Info: info,
-		Sign: sign,
-	}
-}
-
 // Config defaults.
 const (
 	DefaultReadTimeoutMilliseconds  = 5000
@@ -70,15 +52,10 @@ func New(u string, events *EventHub, config *Config) *Client {
 	return client
 }
 
-// SetCredentials allows to set credentials to let client
+// SetToken allows to set connection token so client
 // authenticate itself on connect.
-func (c *Client) SetCredentials(creds *Credentials) {
-	c.client.SetCredentials(&gocentrifuge.Credentials{
-		User: creds.User,
-		Exp:  creds.Exp,
-		Info: creds.Info,
-		Sign: creds.Sign,
-	})
+func (c *Client) SetToken(token string) {
+	c.client.SetToken(token)
 }
 
 // SetConnectData allows to set data to send in connect message.
@@ -110,6 +87,11 @@ func (c *Client) Connect() error {
 // Disconnect client from server.
 func (c *Client) Disconnect() error {
 	return c.client.Disconnect()
+}
+
+// Publish data into channel.
+func (c *Client) Publish(channel string, data []byte) error {
+	return c.client.Publish(channel, data)
 }
 
 // Subscribe allows to subscribe on channel.

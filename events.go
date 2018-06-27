@@ -6,8 +6,7 @@ import (
 
 // PrivateSign confirmes that client can subscribe on private channel.
 type PrivateSign struct {
-	Sign string
-	Info string
+	Token string
 }
 
 // PrivateSubEvent contains info required to create PrivateSign when client
@@ -62,7 +61,7 @@ type PrivateSubHandler interface {
 
 // RefreshHandler is an interface describing how to handle credentials refresh event.
 type RefreshHandler interface {
-	OnRefresh(*Client) (*Credentials, error)
+	OnRefresh(*Client) (string, error)
 }
 
 // ErrorHandler is an interface describing how to handle error event.
@@ -122,22 +121,16 @@ func (p *eventProxy) OnPrivateSub(c *gocentrifuge.Client, e gocentrifuge.Private
 		return gocentrifuge.PrivateSign{}, err
 	}
 	return gocentrifuge.PrivateSign{
-		Sign: sign.Sign,
-		Info: sign.Info,
+		Token: sign.Token,
 	}, nil
 }
 
-func (p *eventProxy) OnRefresh(c *gocentrifuge.Client) (gocentrifuge.Credentials, error) {
-	credentials, err := p.onRefresh.OnRefresh(p.client)
+func (p *eventProxy) OnRefresh(c *gocentrifuge.Client) (string, error) {
+	token, err := p.onRefresh.OnRefresh(p.client)
 	if err != nil {
-		return gocentrifuge.Credentials{}, err
+		return "", err
 	}
-	return gocentrifuge.Credentials{
-		User: credentials.User,
-		Exp:  credentials.Exp,
-		Info: credentials.Info,
-		Sign: credentials.Sign,
-	}, nil
+	return token, nil
 }
 
 func (p *eventProxy) OnError(c *gocentrifuge.Client, e gocentrifuge.ErrorEvent) {
