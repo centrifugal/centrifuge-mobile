@@ -56,7 +56,7 @@ type MessageHandler interface {
 
 // PrivateSubHandler is an interface describing how to handle private subscription request.
 type PrivateSubHandler interface {
-	OnPrivateSub(*Client, *PrivateSubEvent) (*PrivateSign, error)
+	OnPrivateSub(*Client, *PrivateSubEvent) (string, error)
 }
 
 // RefreshHandler is an interface describing how to handle credentials refresh event.
@@ -112,17 +112,15 @@ func (p *eventProxy) OnDisconnect(c *gocentrifuge.Client, e gocentrifuge.Disconn
 	})
 }
 
-func (p *eventProxy) OnPrivateSub(c *gocentrifuge.Client, e gocentrifuge.PrivateSubEvent) (gocentrifuge.PrivateSign, error) {
-	sign, err := p.onPrivateSub.OnPrivateSub(p.client, &PrivateSubEvent{
+func (p *eventProxy) OnPrivateSub(c *gocentrifuge.Client, e gocentrifuge.PrivateSubEvent) (string, error) {
+	token, err := p.onPrivateSub.OnPrivateSub(p.client, &PrivateSubEvent{
 		ClientID: e.ClientID,
 		Channel:  e.Channel,
 	})
 	if err != nil {
-		return gocentrifuge.PrivateSign{}, err
+		return "", err
 	}
-	return gocentrifuge.PrivateSign{
-		Token: sign.Token,
-	}, nil
+	return token, nil
 }
 
 func (p *eventProxy) OnRefresh(c *gocentrifuge.Client) (string, error) {
