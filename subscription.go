@@ -19,6 +19,12 @@ type ClientInfo struct {
 	ChanInfo []byte
 }
 
+// PresenceStats ...
+type PresenceStats struct {
+	NumClients int
+	NumUsers   int
+}
+
 // Subscription describes client subscription to channel.
 type Subscription struct {
 	sub *gocentrifuge.Subscription
@@ -117,5 +123,17 @@ func (s *Subscription) Presence() (*PresenceData, error) {
 	}
 	return &PresenceData{
 		clients: clients,
+	}, nil
+}
+
+// PresenceStats allows to extract presence stats information for channel.
+func (s *Subscription) PresenceStats() (*PresenceStats, error) {
+	stats, err := s.sub.PresenceStats()
+	if err != nil {
+		return nil, err
+	}
+	return &PresenceStats{
+		NumClients: stats.NumClients,
+		NumUsers:   stats.NumUsers,
 	}, nil
 }

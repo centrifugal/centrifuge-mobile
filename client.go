@@ -63,6 +63,11 @@ func (c *Client) SetConnectData(data []byte) {
 	c.client.SetConnectData(data)
 }
 
+// SetHeader allows to set custom header sent in Upgrade HTTP request.
+func (c *Client) SetHeader(key, value string) {
+	c.client.SetHeader(key, value)
+}
+
 // Send data to server asynchronously.
 func (c *Client) Send(data []byte) error {
 	return c.client.Send(data)
