@@ -259,6 +259,13 @@ func (c *Client) handleError(err error) {
 	}
 }
 
+// Connected checks if Client is connected
+func (c *Client) Connected() bool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	return c.status == CONNECTED
+}
+
 // Close closes Client connection and cleans ups everything.
 func (c *Client) Close() {
 	c.mutex.Lock()
