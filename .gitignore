@@ -24,3 +24,8 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+Centrifuge.framework/
+centrifuge-sources.jar
+centrifuge.aar
+BUILDS/

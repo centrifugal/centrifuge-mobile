@@ -1,8 +1,0 @@
-framework module "Centrifuge" {
-	header "ref.h"
-    header "Centrifuge.objc.h"
-    header "Universe.objc.h"
-    header "Centrifuge.h"
-
-    export *
-}
