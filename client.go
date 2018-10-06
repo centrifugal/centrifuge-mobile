@@ -9,6 +9,7 @@ import (
 // Client to connect to Centrifuge-based server or Centrifugo.
 type Client struct {
 	client *gocentrifuge.Client
+	events *EventHub
 }
 
 // Config defaults.
@@ -38,7 +39,7 @@ func DefaultConfig() *Config {
 }
 
 // New initializes Client.
-func New(u string, events *EventHub, config *Config) *Client {
+func New(u string, config *Config) *Client {
 	c := gocentrifuge.Config{
 		ReadTimeout:          time.Duration(config.ReadTimeoutMilliseconds) * time.Millisecond,
 		WriteTimeout:         time.Duration(config.WriteTimeoutMilliseconds) * time.Millisecond,
@@ -46,9 +47,9 @@ func New(u string, events *EventHub, config *Config) *Client {
 		PrivateChannelPrefix: config.PrivateChannelPrefix,
 	}
 	client := &Client{
-		client: gocentrifuge.New(u, events.eventHub, c),
+		client: gocentrifuge.New(u, c),
+		events: NewEventHub(),
 	}
-	events.setClient(client)
 	return client
 }
 
@@ -99,24 +100,14 @@ func (c *Client) Publish(channel string, data []byte) error {
 	return c.client.Publish(channel, data)
 }
 
-// Subscribe allows to subscribe on channel.
-func (c *Client) Subscribe(channel string, events *SubscriptionEventHub) (*Subscription, error) {
-	sub, err := c.client.Subscribe(channel, events.subEventHub)
+// NewSubscription allows to create new Subscription to channel.
+func (c *Client) NewSubscription(channel string) (*Subscription, error) {
+	sub, err := c.client.NewSubscription(channel)
 	if err != nil {
 		return nil, err
 	}
-	return &Subscription{
+	s := &Subscription{
 		sub: sub,
-	}, nil
-}
-
-// SubscribeSync allows to subscribe on channel and wait until subscribe success or error.
-func (c *Client) SubscribeSync(channel string, events *SubscriptionEventHub) (*Subscription, error) {
-	sub, err := c.client.SubscribeSync(channel, events.subEventHub)
-	if err != nil {
-		return nil, err
 	}
-	return &Subscription{
-		sub: sub,
-	}, nil
+	return s, nil
 }
