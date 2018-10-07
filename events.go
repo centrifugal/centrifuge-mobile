@@ -1,6 +1,8 @@
 package centrifuge
 
 import (
+	"fmt"
+
 	gocentrifuge "github.com/centrifugal/centrifuge-go"
 )
 
@@ -77,9 +79,7 @@ type EventHub struct {
 
 // NewEventHub ...
 func NewEventHub() *EventHub {
-	return &EventHub{
-		eventHub: gocentrifuge.NewEventHub(),
-	}
+	return &EventHub{}
 }
 
 func (h *EventHub) setClient(c *Client) {
@@ -144,39 +144,39 @@ func (p *eventProxy) OnMessage(c *gocentrifuge.Client, e gocentrifuge.MessageEve
 }
 
 // OnConnect is a function to handle connect event.
-func (h *EventHub) OnConnect(handler ConnectHandler) {
-	proxy := &eventProxy{client: h.client, onConnect: handler}
-	h.eventHub.OnConnect(proxy)
+func (c *Client) OnConnect(handler ConnectHandler) {
+	proxy := &eventProxy{client: c, onConnect: handler}
+	c.client.OnConnect(proxy)
 }
 
 // OnDisconnect is a function to handle disconnect event.
-func (h *EventHub) OnDisconnect(handler DisconnectHandler) {
-	proxy := &eventProxy{client: h.client, onDisconnect: handler}
-	h.eventHub.OnDisconnect(proxy)
+func (c *Client) OnDisconnect(handler DisconnectHandler) {
+	proxy := &eventProxy{client: c, onDisconnect: handler}
+	c.client.OnDisconnect(proxy)
 }
 
 // OnPrivateSub needed to handle private channel subscriptions.
-func (h *EventHub) OnPrivateSub(handler PrivateSubHandler) {
-	proxy := &eventProxy{client: h.client, onPrivateSub: handler}
-	h.eventHub.OnPrivateSub(proxy)
+func (c *Client) OnPrivateSub(handler PrivateSubHandler) {
+	proxy := &eventProxy{client: c, onPrivateSub: handler}
+	c.client.OnPrivateSub(proxy)
 }
 
 // OnRefresh handles refresh event when client's credentials expired and must be refreshed.
-func (h *EventHub) OnRefresh(handler RefreshHandler) {
-	proxy := &eventProxy{client: h.client, onRefresh: handler}
-	h.eventHub.OnRefresh(proxy)
+func (c *Client) OnRefresh(handler RefreshHandler) {
+	proxy := &eventProxy{client: c, onRefresh: handler}
+	c.client.OnRefresh(proxy)
 }
 
 // OnError is a function that will receive unhandled errors for logging.
-func (h *EventHub) OnError(handler ErrorHandler) {
-	proxy := &eventProxy{client: h.client, onError: handler}
-	h.eventHub.OnError(proxy)
+func (c *Client) OnError(handler ErrorHandler) {
+	proxy := &eventProxy{client: c, onError: handler}
+	c.client.OnError(proxy)
 }
 
 // OnMessage allows to process async message from server to client.
-func (h *EventHub) OnMessage(handler MessageHandler) {
-	proxy := &eventProxy{client: h.client, onMessage: handler}
-	h.eventHub.OnMessage(proxy)
+func (c *Client) OnMessage(handler MessageHandler) {
+	proxy := &eventProxy{client: c, onMessage: handler}
+	c.client.OnMessage(proxy)
 }
 
 // SubscribeSuccessEvent is a subscribe success event context passed
@@ -258,9 +258,7 @@ type SubscriptionEventHub struct {
 
 // NewSubscriptionEventHub initializes new SubscriptionEventHub.
 func NewSubscriptionEventHub() *SubscriptionEventHub {
-	return &SubscriptionEventHub{
-		subEventHub: gocentrifuge.NewSubscriptionEventHub(),
-	}
+	return &SubscriptionEventHub{}
 }
 
 func (h *SubscriptionEventHub) setSub(s *Subscription) {
@@ -279,6 +277,7 @@ type subEventProxy struct {
 }
 
 func (p *subEventProxy) OnPublish(s *gocentrifuge.Subscription, e gocentrifuge.PublishEvent) {
+	fmt.Printf("%#v\n", p)
 	pub := Publication{
 		UID:  e.UID,
 		Data: e.Data,
@@ -304,7 +303,6 @@ func (p *subEventProxy) OnPublish(s *gocentrifuge.Subscription, e gocentrifuge.P
 			ChanInfo: e.Info.ChanInfo,
 		}
 	}
-
 	p.onPublish.OnPublish(p.sub, event)
 }
 
@@ -344,37 +342,37 @@ func (p *subEventProxy) OnSubscribeError(s *gocentrifuge.Subscription, e gocentr
 }
 
 // OnPublish allows to set PublishHandler to SubEventHandler.
-func (h *SubscriptionEventHub) OnPublish(handler PublishHandler) {
-	proxy := &subEventProxy{sub: h.sub, onPublish: handler}
-	h.subEventHub.OnPublish(proxy)
+func (s *Subscription) OnPublish(handler PublishHandler) {
+	proxy := &subEventProxy{sub: s, onPublish: handler}
+	s.sub.OnPublish(proxy)
 }
 
 // OnJoin allows to set JoinHandler to SubEventHandler.
-func (h *SubscriptionEventHub) OnJoin(handler JoinHandler) {
-	proxy := &subEventProxy{sub: h.sub, onJoin: handler}
-	h.subEventHub.OnPublish(proxy)
+func (s *Subscription) OnJoin(handler JoinHandler) {
+	proxy := &subEventProxy{sub: s, onJoin: handler}
+	s.sub.OnJoin(proxy)
 }
 
 // OnLeave allows to set LeaveHandler to SubEventHandler.
-func (h *SubscriptionEventHub) OnLeave(handler LeaveHandler) {
-	proxy := &subEventProxy{sub: h.sub, onLeave: handler}
-	h.subEventHub.OnPublish(proxy)
+func (s *Subscription) OnLeave(handler LeaveHandler) {
+	proxy := &subEventProxy{sub: s, onLeave: handler}
+	s.sub.OnLeave(proxy)
 }
 
 // OnUnsubscribe allows to set UnsubscribeHandler to SubEventHandler.
-func (h *SubscriptionEventHub) OnUnsubscribe(handler UnsubscribeHandler) {
-	proxy := &subEventProxy{sub: h.sub, onUnsubscribe: handler}
-	h.subEventHub.OnPublish(proxy)
+func (s *Subscription) OnUnsubscribe(handler UnsubscribeHandler) {
+	proxy := &subEventProxy{sub: s, onUnsubscribe: handler}
+	s.sub.OnUnsubscribe(proxy)
 }
 
 // OnSubscribeSuccess allows to set SubscribeSuccessHandler to SubEventHandler.
-func (h *SubscriptionEventHub) OnSubscribeSuccess(handler SubscribeSuccessHandler) {
-	proxy := &subEventProxy{sub: h.sub, onSubscribeSuccess: handler}
-	h.subEventHub.OnPublish(proxy)
+func (s *Subscription) OnSubscribeSuccess(handler SubscribeSuccessHandler) {
+	proxy := &subEventProxy{sub: s, onSubscribeSuccess: handler}
+	s.sub.OnSubscribeSuccess(proxy)
 }
 
 // OnSubscribeError allows to set SubscribeErrorHandler to SubEventHandler.
-func (h *SubscriptionEventHub) OnSubscribeError(handler SubscribeErrorHandler) {
-	proxy := &subEventProxy{sub: h.sub, onSubscribeError: handler}
-	h.subEventHub.OnPublish(proxy)
+func (s *Subscription) OnSubscribeError(handler SubscribeErrorHandler) {
+	proxy := &subEventProxy{sub: s, onSubscribeError: handler}
+	s.sub.OnSubscribeError(proxy)
 }
