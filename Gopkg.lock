@@ -2,15 +2,15 @@
 
 
 [[projects]]
-  digest = "1:61cf13f65b37cdf2397f5f98a2be02d6c34374bc896fe5d2d7972a57ad35ef55"
+  digest = "1:24395a295e7694973a9eccc4030f1dcd4dc4ea9a484004ed39bb41cda645f97b"
   name = "github.com/centrifugal/centrifuge-go"
   packages = [
     ".",
     "internal/proto",
   ]
   pruneopts = "UT"
-  revision = "577c90c7b49133b6583614bb12ca0875f8dcb14a"
-  version = "v0.2.2"
+  revision = "11a07e2e8b36da0626a3f3468175e6edfb6c300c"
+  version = "v0.2.3"
 
 [[projects]]
   digest = "1:bfc758d5a03d57d97226fac6934551c01bd76612adb119c177395b057a0a46db"
