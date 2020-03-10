@@ -21,7 +21,7 @@ func (h *eventHandler) OnConnect(c *centrifuge.Client, e *centrifuge.ConnectEven
 }
 
 func (h *eventHandler) OnDisconnect(c *centrifuge.Client, e *centrifuge.DisconnectEvent) {
-	log.Println("client diconnected")
+	log.Println("client disconnected")
 }
 
 type subEventHandler struct{}

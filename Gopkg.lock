@@ -2,15 +2,20 @@
 
 
 [[projects]]
-  digest = "1:24395a295e7694973a9eccc4030f1dcd4dc4ea9a484004ed39bb41cda645f97b"
+  digest = "1:2b73299f772e7cf5222304d8fb73de31979d3511b2eafa6e6076ebfc9a956c9e"
   name = "github.com/centrifugal/centrifuge-go"
-  packages = [
-    ".",
-    "internal/proto",
-  ]
+  packages = ["."]
   pruneopts = "UT"
-  revision = "11a07e2e8b36da0626a3f3468175e6edfb6c300c"
-  version = "v0.2.3"
+  revision = "dbf4ad2f3ca8da3ff6c90fa1e40cb68ddd1c3be6"
+  version = "v0.3.0"
+
+[[projects]]
+  digest = "1:12db72c3065d1ca53e39675d9ef4a83eeaffde537ff8121f3dcf1d191c4837ac"
+  name = "github.com/centrifugal/protocol"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "33b44672940bda32f2d74414d1d4fb1603d5fd48"
+  version = "v0.1.0"
 
 [[projects]]
   digest = "1:bfc758d5a03d57d97226fac6934551c01bd76612adb119c177395b057a0a46db"
@@ -25,12 +30,12 @@
   version = "v1.1.1"
 
 [[projects]]
-  digest = "1:7b5c6e2eeaa9ae5907c391a91c132abfd5c9e8a784a341b5625e750c67e6825d"
+  digest = "1:e62657cca9badaa308d86e7716083e4c5933bb78e30a17743fc67f50be26f6f4"
   name = "github.com/gorilla/websocket"
   packages = ["."]
   pruneopts = "UT"
-  revision = "66b9c49e59c6c48f0ffce28c2d8b8a5678502c6d"
-  version = "v1.4.0"
+  revision = "c3e18be99d19e6b3e8f1559eea2c161a665c4b6b"
+  version = "v1.4.1"
 
 [[projects]]
   digest = "1:b6bbd2f9e0724bd81890c8644259f920c6d61c08453978faff0bebd25f3e7d3e"
