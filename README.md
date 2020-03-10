@@ -17,7 +17,17 @@ To build mobile libraries from Go source code using `gomobile`:
 
 ```
 go get -u golang.org/x/mobile/cmd/gomobile
-gomobile init -ndk ~/PATH/TO/ANDROID/NDK
+gomobile init
 gomobile bind -target=ios github.com/centrifugal/centrifuge-mobile
 gomobile bind -target=android github.com/centrifugal/centrifuge-mobile
+```
+
+Release
+-------
+
+```
+go get -u golang.org/x/mobile/cmd/gomobile
+gomobile init
+export ANDROID_NDK_HOME=/path/to/android-ndk-rXX
+make release
 ```
