@@ -1,8 +1,6 @@
 package centrifuge
 
 import (
-	"fmt"
-
 	gocentrifuge "github.com/centrifugal/centrifuge-go"
 )
 
@@ -277,7 +275,6 @@ type subEventProxy struct {
 }
 
 func (p *subEventProxy) OnPublish(s *gocentrifuge.Subscription, e gocentrifuge.PublishEvent) {
-	fmt.Printf("%#v\n", p)
 	pub := Publication{
 		UID:  e.UID,
 		Data: e.Data,
