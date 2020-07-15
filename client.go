@@ -80,6 +80,11 @@ func (c *Client) RPC(data []byte) ([]byte, error) {
 	return c.client.RPC(data)
 }
 
+// NamedRPC allows to make RPC with method.
+func (c *Client) NamedRPC(method string, data []byte) ([]byte, error) {
+	return c.client.NamedRPC(method, data)
+}
+
 // Close closes Client connection and cleans ups everything.
 func (c *Client) Close() error {
 	return c.client.Close()

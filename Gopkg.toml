@@ -27,7 +27,7 @@
 
 [[constraint]]
   name = "github.com/centrifugal/centrifuge-go"
-  version = "0.5.0"
+  version = "0.5.2"
 
 [prune]
   go-tests = true
