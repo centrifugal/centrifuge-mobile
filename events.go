@@ -69,21 +69,6 @@ type ErrorHandler interface {
 	OnError(*Client, *ErrorEvent)
 }
 
-// EventHub ...
-type EventHub struct {
-	client   *Client
-	eventHub *gocentrifuge.EventHub
-}
-
-// NewEventHub ...
-func NewEventHub() *EventHub {
-	return &EventHub{}
-}
-
-func (h *EventHub) setClient(c *Client) {
-	h.client = c
-}
-
 type eventProxy struct {
 	client *Client
 
@@ -246,21 +231,6 @@ type SubscribeSuccessHandler interface {
 // SubscribeErrorHandler is a function to handle subscribe error event.
 type SubscribeErrorHandler interface {
 	OnSubscribeError(*Subscription, *SubscribeErrorEvent)
-}
-
-// SubscriptionEventHub ...
-type SubscriptionEventHub struct {
-	sub         *Subscription
-	subEventHub *gocentrifuge.SubscriptionEventHub
-}
-
-// NewSubscriptionEventHub initializes new SubscriptionEventHub.
-func NewSubscriptionEventHub() *SubscriptionEventHub {
-	return &SubscriptionEventHub{}
-}
-
-func (h *SubscriptionEventHub) setSub(s *Subscription) {
-	h.sub = s
 }
 
 type subEventProxy struct {

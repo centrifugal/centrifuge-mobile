@@ -9,7 +9,6 @@ import (
 // Client to connect to Centrifuge-based server or Centrifugo.
 type Client struct {
 	client *gocentrifuge.Client
-	events *EventHub
 }
 
 // Config defaults.
@@ -48,7 +47,6 @@ func New(u string, config *Config) *Client {
 	}
 	client := &Client{
 		client: gocentrifuge.New(u, c),
-		events: NewEventHub(),
 	}
 	return client
 }

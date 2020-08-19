@@ -30,3 +30,5 @@ centrifuge-sources.jar
 centrifuge.aar
 BUILDS/
 vendor/
+.idea
+.vscode
