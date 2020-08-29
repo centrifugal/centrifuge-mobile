@@ -72,15 +72,31 @@ func (c *Client) Send(data []byte) error {
 	return c.client.Send(data)
 }
 
+type RPCResult struct {
+	Data []byte
+}
+
 // RPC allows to make RPC – send data to server ant wait for response.
 // RPC handler must be registered on server.
-func (c *Client) RPC(data []byte) ([]byte, error) {
-	return c.client.RPC(data)
+func (c *Client) RPC(data []byte) (*RPCResult, error) {
+	res, err := c.client.RPC(data)
+	if err != nil {
+		return nil, err
+	}
+	return &RPCResult{
+		Data: res.Data,
+	}, nil
 }
 
 // NamedRPC allows to make RPC with method.
-func (c *Client) NamedRPC(method string, data []byte) ([]byte, error) {
-	return c.client.NamedRPC(method, data)
+func (c *Client) NamedRPC(method string, data []byte) (*RPCResult, error) {
+	res, err := c.client.NamedRPC(method, data)
+	if err != nil {
+		return nil, err
+	}
+	return &RPCResult{
+		Data: res.Data,
+	}, nil
 }
 
 // Close closes Client connection and cleans ups everything.
@@ -99,8 +115,12 @@ func (c *Client) Disconnect() error {
 }
 
 // Publish data into channel.
-func (c *Client) Publish(channel string, data []byte) error {
-	return c.client.Publish(channel, data)
+func (c *Client) Publish(channel string, data []byte) (*PublishResult, error) {
+	_, err := c.client.Publish(channel, data)
+	if err != nil {
+		return nil, err
+	}
+	return &PublishResult{}, nil
 }
 
 // NewSubscription allows to create new Subscription to channel.

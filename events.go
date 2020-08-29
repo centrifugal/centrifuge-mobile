@@ -4,7 +4,7 @@ import (
 	gocentrifuge "github.com/centrifugal/centrifuge-go"
 )
 
-// PrivateSign confirmes that client can subscribe on private channel.
+// PrivateSign confirms that client can subscribe on private channel.
 type PrivateSign struct {
 	Token string
 }
@@ -80,7 +80,7 @@ type eventProxy struct {
 	onMessage    MessageHandler
 }
 
-func (p *eventProxy) OnConnect(c *gocentrifuge.Client, e gocentrifuge.ConnectEvent) {
+func (p *eventProxy) OnConnect(_ *gocentrifuge.Client, e gocentrifuge.ConnectEvent) {
 	p.onConnect.OnConnect(p.client, &ConnectEvent{
 		ClientID: e.ClientID,
 		Version:  e.Version,
@@ -88,14 +88,14 @@ func (p *eventProxy) OnConnect(c *gocentrifuge.Client, e gocentrifuge.ConnectEve
 	})
 }
 
-func (p *eventProxy) OnDisconnect(c *gocentrifuge.Client, e gocentrifuge.DisconnectEvent) {
+func (p *eventProxy) OnDisconnect(_ *gocentrifuge.Client, e gocentrifuge.DisconnectEvent) {
 	p.onDisconnect.OnDisconnect(p.client, &DisconnectEvent{
 		Reason:    e.Reason,
 		Reconnect: e.Reconnect,
 	})
 }
 
-func (p *eventProxy) OnPrivateSub(c *gocentrifuge.Client, e gocentrifuge.PrivateSubEvent) (string, error) {
+func (p *eventProxy) OnPrivateSub(_ *gocentrifuge.Client, e gocentrifuge.PrivateSubEvent) (string, error) {
 	token, err := p.onPrivateSub.OnPrivateSub(p.client, &PrivateSubEvent{
 		ClientID: e.ClientID,
 		Channel:  e.Channel,
@@ -106,7 +106,7 @@ func (p *eventProxy) OnPrivateSub(c *gocentrifuge.Client, e gocentrifuge.Private
 	return token, nil
 }
 
-func (p *eventProxy) OnRefresh(c *gocentrifuge.Client) (string, error) {
+func (p *eventProxy) OnRefresh(_ *gocentrifuge.Client) (string, error) {
 	token, err := p.onRefresh.OnRefresh(p.client)
 	if err != nil {
 		return "", err
@@ -114,13 +114,13 @@ func (p *eventProxy) OnRefresh(c *gocentrifuge.Client) (string, error) {
 	return token, nil
 }
 
-func (p *eventProxy) OnError(c *gocentrifuge.Client, e gocentrifuge.ErrorEvent) {
+func (p *eventProxy) OnError(_ *gocentrifuge.Client, e gocentrifuge.ErrorEvent) {
 	p.onError.OnError(p.client, &ErrorEvent{
 		Message: e.Message,
 	})
 }
 
-func (p *eventProxy) OnMessage(c *gocentrifuge.Client, e gocentrifuge.MessageEvent) {
+func (p *eventProxy) OnMessage(_ *gocentrifuge.Client, e gocentrifuge.MessageEvent) {
 	p.onMessage.OnMessage(p.client, &MessageEvent{
 		Data: e.Data,
 	})
@@ -196,9 +196,9 @@ type JoinEvent struct {
 
 // PublishEvent has info about received channel Publication.
 type PublishEvent struct {
-	UID  string
-	Data []byte
-	Info *ClientInfo
+	Offset uint64
+	Data   []byte
+	Info   *ClientInfo
 }
 
 // PublishHandler is a function to handle messages published in
@@ -244,10 +244,10 @@ type subEventProxy struct {
 	onSubscribeError   SubscribeErrorHandler
 }
 
-func (p *subEventProxy) OnPublish(s *gocentrifuge.Subscription, e gocentrifuge.PublishEvent) {
+func (p *subEventProxy) OnPublish(_ *gocentrifuge.Subscription, e gocentrifuge.PublishEvent) {
 	pub := Publication{
-		UID:  e.UID,
-		Data: e.Data,
+		Offset: e.Offset,
+		Data:   e.Data,
 	}
 	if e.Info != nil {
 		pub.Info = &ClientInfo{
@@ -259,8 +259,8 @@ func (p *subEventProxy) OnPublish(s *gocentrifuge.Subscription, e gocentrifuge.P
 	}
 
 	event := &PublishEvent{
-		UID:  e.UID,
-		Data: e.Data,
+		Offset: e.Offset,
+		Data:   e.Data,
 	}
 	if e.Info != nil {
 		event.Info = &ClientInfo{
@@ -273,7 +273,7 @@ func (p *subEventProxy) OnPublish(s *gocentrifuge.Subscription, e gocentrifuge.P
 	p.onPublish.OnPublish(p.sub, event)
 }
 
-func (p *subEventProxy) OnJoin(s *gocentrifuge.Subscription, e gocentrifuge.JoinEvent) {
+func (p *subEventProxy) OnJoin(_ *gocentrifuge.Subscription, e gocentrifuge.JoinEvent) {
 	p.onJoin.OnJoin(p.sub, &JoinEvent{
 		Client:   e.Client,
 		User:     e.User,
@@ -282,7 +282,7 @@ func (p *subEventProxy) OnJoin(s *gocentrifuge.Subscription, e gocentrifuge.Join
 	})
 }
 
-func (p *subEventProxy) OnLeave(s *gocentrifuge.Subscription, e gocentrifuge.LeaveEvent) {
+func (p *subEventProxy) OnLeave(_ *gocentrifuge.Subscription, e gocentrifuge.LeaveEvent) {
 	p.onLeave.OnLeave(p.sub, &LeaveEvent{
 		Client:   e.Client,
 		User:     e.User,
@@ -291,18 +291,18 @@ func (p *subEventProxy) OnLeave(s *gocentrifuge.Subscription, e gocentrifuge.Lea
 	})
 }
 
-func (p *subEventProxy) OnUnsubscribe(s *gocentrifuge.Subscription, e gocentrifuge.UnsubscribeEvent) {
+func (p *subEventProxy) OnUnsubscribe(_ *gocentrifuge.Subscription, _ gocentrifuge.UnsubscribeEvent) {
 	p.onUnsubscribe.OnUnsubscribe(p.sub, &UnsubscribeEvent{})
 }
 
-func (p *subEventProxy) OnSubscribeSuccess(s *gocentrifuge.Subscription, e gocentrifuge.SubscribeSuccessEvent) {
+func (p *subEventProxy) OnSubscribeSuccess(_ *gocentrifuge.Subscription, e gocentrifuge.SubscribeSuccessEvent) {
 	p.onSubscribeSuccess.OnSubscribeSuccess(p.sub, &SubscribeSuccessEvent{
 		Resubscribed: e.Resubscribed,
 		Recovered:    e.Recovered,
 	})
 }
 
-func (p *subEventProxy) OnSubscribeError(s *gocentrifuge.Subscription, e gocentrifuge.SubscribeErrorEvent) {
+func (p *subEventProxy) OnSubscribeError(_ *gocentrifuge.Subscription, e gocentrifuge.SubscribeErrorEvent) {
 	p.onSubscribeError.OnSubscribeError(p.sub, &SubscribeErrorEvent{
 		Error: e.Error,
 	})

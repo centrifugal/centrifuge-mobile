@@ -6,9 +6,9 @@ import (
 
 // Publication ...
 type Publication struct {
-	UID  string
-	Data []byte
-	Info *ClientInfo
+	Offset uint64
+	Data   []byte
+	Info   *ClientInfo
 }
 
 // ClientInfo ...
@@ -35,9 +35,15 @@ func (s *Subscription) Channel() string {
 	return s.sub.Channel()
 }
 
+type PublishResult struct{}
+
 // Publish allows to publish JSON encoded data to subscription channel.
-func (s *Subscription) Publish(data []byte) error {
-	return s.sub.Publish(data)
+func (s *Subscription) Publish(data []byte) (*PublishResult, error) {
+	_, err := s.sub.Publish(data)
+	if err != nil {
+		return nil, err
+	}
+	return &PublishResult{}, nil
 }
 
 // Unsubscribe allows to unsubscribe from channel.
@@ -65,26 +71,28 @@ func (d *HistoryData) ItemAt(i int) *Publication {
 	pub := d.publications[i]
 	var info *ClientInfo
 	if pub.Info != nil {
-		info.Client = pub.Info.Client
-		info.User = pub.Info.User
-		info.ConnInfo = pub.Info.ConnInfo
-		info.ChanInfo = pub.Info.ChanInfo
+		info = &ClientInfo{
+			Client:   pub.Info.Client,
+			User:     pub.Info.User,
+			ConnInfo: pub.Info.ConnInfo,
+			ChanInfo: pub.Info.ChanInfo,
+		}
 	}
 	return &Publication{
-		UID:  pub.UID,
-		Data: pub.Data,
-		Info: info,
+		Offset: pub.Offset,
+		Data:   pub.Data,
+		Info:   info,
 	}
 }
 
 // History allows to extract channel history.
 func (s *Subscription) History() (*HistoryData, error) {
-	publications, err := s.sub.History()
+	res, err := s.sub.History()
 	if err != nil {
 		return nil, err
 	}
 	return &HistoryData{
-		publications: publications,
+		publications: res.Publications,
 	}, nil
 }
 
@@ -111,13 +119,13 @@ func (d *PresenceData) ItemAt(i int) *ClientInfo {
 
 // Presence allows to extract presence information for channel.
 func (s *Subscription) Presence() (*PresenceData, error) {
-	presence, err := s.sub.Presence()
+	res, err := s.sub.Presence()
 	if err != nil {
 		return nil, err
 	}
-	clients := make([]gocentrifuge.ClientInfo, len(presence))
+	clients := make([]gocentrifuge.ClientInfo, len(res.Presence))
 	i := 0
-	for _, info := range presence {
+	for _, info := range res.Presence {
 		clients[i] = info
 		i++
 	}

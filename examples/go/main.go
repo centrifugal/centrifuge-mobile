@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 
-	centrifuge "github.com/centrifugal/centrifuge-mobile"
+	"github.com/centrifugal/centrifuge-mobile"
 )
 
 type testMessage struct {
@@ -16,11 +16,11 @@ type testMessage struct {
 
 type eventHandler struct{}
 
-func (h *eventHandler) OnConnect(c *centrifuge.Client, e *centrifuge.ConnectEvent) {
+func (h *eventHandler) OnConnect(_ *centrifuge.Client, _ *centrifuge.ConnectEvent) {
 	log.Printf("client connected")
 }
 
-func (h *eventHandler) OnDisconnect(c *centrifuge.Client, e *centrifuge.DisconnectEvent) {
+func (h *eventHandler) OnDisconnect(_ *centrifuge.Client, _ *centrifuge.DisconnectEvent) {
 	log.Println("client disconnected")
 }
 
@@ -70,7 +70,7 @@ func main() {
 
 	data := testMessage{Input: "example input"}
 	dataBytes, _ := json.Marshal(data)
-	err = sub.Publish(dataBytes)
+	_, err = sub.Publish(dataBytes)
 	if err != nil {
 		log.Fatalln(err)
 	}
