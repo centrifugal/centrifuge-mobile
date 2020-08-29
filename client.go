@@ -57,6 +57,16 @@ func (c *Client) SetToken(token string) {
 	c.client.SetToken(token)
 }
 
+// SetName allows to set client name.
+func (c *Client) SetName(name string) {
+	c.client.SetName(name)
+}
+
+// SetVersion allows to set client version.
+func (c *Client) SetVersion(version string) {
+	c.client.SetVersion(version)
+}
+
 // SetConnectData allows to set data to send in connect message.
 func (c *Client) SetConnectData(data []byte) {
 	c.client.SetConnectData(data)
