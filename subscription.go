@@ -6,7 +6,7 @@ import (
 
 // Publication ...
 type Publication struct {
-	Offset uint64
+	Offset int64
 	Data   []byte
 	Info   *ClientInfo
 }
@@ -79,7 +79,7 @@ func (d *HistoryData) ItemAt(i int) *Publication {
 		}
 	}
 	return &Publication{
-		Offset: pub.Offset,
+		Offset: int64(pub.Offset),
 		Data:   pub.Data,
 		Info:   info,
 	}

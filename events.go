@@ -72,7 +72,7 @@ type ErrorHandler interface {
 // ServerPublishEvent has info about received channel Publication.
 type ServerPublishEvent struct {
 	Channel string
-	Offset  uint64
+	Offset  int64
 	Data    []byte
 	Info    *ClientInfo
 }
@@ -198,7 +198,7 @@ func (p *eventProxy) OnMessage(_ *gocentrifuge.Client, e gocentrifuge.MessageEve
 func (p *eventProxy) OnServerPublish(_ *gocentrifuge.Client, e gocentrifuge.ServerPublishEvent) {
 	event := &ServerPublishEvent{
 		Channel: e.Channel,
-		Offset:  e.Offset,
+		Offset:  int64(e.Offset),
 		Data:    e.Data,
 	}
 	if e.Info != nil {
@@ -350,7 +350,7 @@ type JoinEvent struct {
 
 // PublishEvent has info about received channel Publication.
 type PublishEvent struct {
-	Offset uint64
+	Offset int64
 	Data   []byte
 	Info   *ClientInfo
 }
@@ -400,7 +400,7 @@ type subEventProxy struct {
 
 func (p *subEventProxy) OnPublish(_ *gocentrifuge.Subscription, e gocentrifuge.PublishEvent) {
 	event := &PublishEvent{
-		Offset: e.Offset,
+		Offset: int64(e.Offset),
 		Data:   e.Data,
 	}
 	if e.Info != nil {
