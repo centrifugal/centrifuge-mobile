@@ -1,5 +1,5 @@
-github.com/centrifugal/centrifuge-go v0.6.0 h1:0xst58Y9unzO2Fl8ODn9MxYoM9jj2GQcIfbmIBKg7n0=
-github.com/centrifugal/centrifuge-go v0.6.0/go.mod h1:YW9BKhnEMOBPU7C/wfqdqzhIiF0xRd0R4sHW82a7sf8=
+github.com/centrifugal/centrifuge-go v0.6.1 h1:9fbCJj2Dy4WAsxTZp+S84R7HLQlXqst3o5uRyfEg/v8=
+github.com/centrifugal/centrifuge-go v0.6.1/go.mod h1:YW9BKhnEMOBPU7C/wfqdqzhIiF0xRd0R4sHW82a7sf8=
 github.com/centrifugal/protocol v0.3.4 h1:9q22iSp4CQOdQahfopvfmWWxDbj1Lo7ERG2j56mAxkE=
 github.com/centrifugal/protocol v0.3.4/go.mod h1:2YbBCaDwQHl37ErRdMrKSj18X2yVvpkQYtSX6aVbe5A=
 github.com/gogo/protobuf v1.3.1 h1:DqDEcV5aeaTmdFBePNpYsp3FlcVH/2ISVVM9Qf8PSls=
